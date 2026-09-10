@@ -2,7 +2,10 @@
 
 **שיבוץ חדרים לפנימייה.** קובץ HTML אחד — בלי התקנה, בלי שרת, עובד גם בלי אינטרנט.
 
-**▶️ [פתיחת התוכנה](https://beniabot.github.io/wolf-sheep-cabbage/)** · או להוריד את `index.html` וללחוץ עליו פעמיים.
+**▶️ [פתיחת התוכנה](https://beniabot.github.io/wolf-sheep-cabbage/)** · או **[להוריד את הקובץ](https://github.com/BeniaBot/wolf-sheep-cabbage/releases/latest/download/WolfSheepCabbage.html)** וללחוץ עליו פעמיים.
+
+ההורדה עובדת גם במחשב בלי אינטרנט: מעבירים את הקובץ בדיסק-און-קי, לוחצים פעמיים, וזהו.
+הוא מופיע גם ב[חנות האפליקציות האופליין](https://beniabot.github.io/winapps-offline/).
 
 ---
 
