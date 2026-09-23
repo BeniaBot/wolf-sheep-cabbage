@@ -1337,6 +1337,9 @@ body.nopulse .pb-room.warn-hard{animation:none}
    ===============  TEMPLATE GALLERY · LAYOUT EDITOR  ==================
    ===================================================================== */
 .tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(216px,1fr));gap:12px}
+/* in the wing dialog the shapes are a choice among several, not the main event */
+#wgTpls{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:9px}
+#wgTpls .tpl-d{font-size:11.5px}
 .tpl{
   text-align:start;font:inherit;color:var(--tx);cursor:pointer;
   background:var(--card2);border:1.5px solid var(--line2);border-radius:16px;padding:13px 14px;
@@ -2528,12 +2531,10 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
       </div>
 
       <div class="ed-sec">
-        <h4 id="wgRoomsH">📐 תבנית <span class="cnt">בוחרים פריסה — והאגף נבנה לבד</span></h4>
-        <div id="wgTplPick">
-          <p class="hint">רוב הפנימיות בנויות אותו דבר: מסדרון, חדרים לצדדים, ובנקודות מסוימות מקלחות,
-            שירותים, מדרגות או שטח מת. בחרו את התבנית הקרובה ביותר, ואחר כך תזיזו מה שצריך.</p>
-          <div class="tpl-grid" id="wgTpls"></div>
-        </div>
+        <h4 id="wgRoomsH">🚪 החדרים</h4>
+        <!-- the numbers first, the way they are read off the paper sheet; the shapes
+             after them. Seven big cards above the fields pushed both the fields and
+             the drawing below the fold of a dialog he had just opened. -->
         <div class="wiz-row">
           <div class="wiz-f"><label>כמה חדרים</label><input type="text" id="wgCount" value="10"></div>
           <div class="wiz-f"><label>מיטות בחדר</label><input type="text" id="wgBeds" value="4"></div>
@@ -2541,6 +2542,11 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
           <button class="btn accent" id="wgApplyTpl">🧱 בניית הפריסה</button>
         </div>
         <p class="hint" id="wgTplNote" style="margin:9px 0 0"></p>
+        <div id="wgTplPick">
+          <p class="hint" style="margin-top:14px"><b>📐 איך נראית הקומה?</b>
+            לוחצים על הצורה הכי דומה לדף שלכם. את השאר מתקנים למטה, חדר־חדר.</p>
+          <div class="tpl-grid" id="wgTpls"></div>
+        </div>
       </div>
 
       <div class="ed-sec" id="wgLaySec">
@@ -2573,9 +2579,8 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
           </div>
         </div>
         <div class="dlgbtns wrap">
-          <button class="btn mini" id="wgAutoLay">🔄 סידור אוטומטי של החדרים</button>
-          <button class="btn mini" id="wgSaveTpl">⭐ שמירה כתבנית חדשה</button>
-          <button class="btn mini" id="wgMgrTpl">📚 ניהול התבניות</button>
+          <button class="btn mini" id="wgAutoLay">🔄 ליישר לשתי שורות לאורך מסדרון</button>
+          <button class="btn mini" id="wgSaveTpl">⭐ לשמור את הצורה הזו כתבנית</button>
         </div>
       </div>
 
@@ -3275,10 +3280,23 @@ const WING_TEMPLATES=[
      b.splice(Math.ceil(b.length/2),0,{t:'dead'});
      return {a,b};
    }},
-  {id:'blank',ico:'⬜',name:'ריק',
-   desc:'מסדרון חשוף. מוסיפים משבצות אחת־אחת ובונים בדיוק לפי המציאות.',
-   make(nums){return {a:nums.map(n=>({t:'room',num:n})),b:[]};}}
+  /* it was called "ריק" and promised a bare corridor — and built a full row of rooms */
+  {id:'blank',ico:'⬜',name:'רק חדרים',
+   desc:'חדרים משני צידי המסדרון, בלי כניסה ובלי שירותים — מוסיפים אותם אחר כך בדיוק איפה שהם.',
+   make(nums){
+     const half=Math.ceil(nums.length/2);
+     return {a:nums.slice(0,half).map(n=>({t:'room',num:n})),b:nums.slice(half).map(n=>({t:'room',num:n}))};
+   }}
 ];
+/* a long wing overflows one side of the corridor: move the overflow to the other
+   side while it has room, instead of letting sidesToPlan cut it off the end — which
+   is where the toilets and showers usually are */
+function balanceSides(s){
+  const M=PW-2;
+  while(s.a.length>M&&s.b.length<M)s.b.push(s.a.pop());
+  while(s.b.length>M&&s.a.length<M)s.a.push(s.b.pop());
+  return s;
+}
 
 
 let S=loadState();
@@ -7676,7 +7694,7 @@ function wingColor(id){
   return ROOM_COLORS[(i<0?0:i)%ROOM_COLORS.length];
 }
 function nextWingName(bid){
-  const n=S.wings.filter(w=>w.building===bid).length+1;
+  const n=S.wings.filter(w=>w.building===bid&&!isGhostWing(w)).length+1;
   let nm='אגף '+n,k=n;
   while(S.wings.some(w=>w.name===nm))nm='אגף '+(++k);
   return nm;
@@ -8453,14 +8471,19 @@ function openWing(id,bldId,floorId){
   const fl0=w&&onFloor(w.floor)?w.floor
     :onFloor(floorId)?floorId
     :(EDB&&EDB.id===b0.id&&onFloor(EDB.floor))?EDB.floor:b0.floors[0].id;
-  EDW={id:id||null,building:b0.id,floor:fl0,tpl:null};
+  /* a brand-new wing opens READY: a shape already chosen and built, a name already
+     suggested. The first thing he can do is correct what he sees, not make three
+     decisions before anything appears — and "🧱 בניית הפריסה" can never again answer
+     "בחרו קודם תבנית" to someone who just typed how many rooms he has. */
+  const fresh=!w||isGhostWing(w);
+  EDW={id:id||null,building:b0.id,floor:fl0,tpl:fresh&&isPro()?DEFAULT_TPL:null,built:null};
   /* one value for both the field and the draft. It used to be read from #wgBeds
      BEFORE the line below overwrote that field, and nothing resets the field on
      close — so a hand-drawn room got a bed count contradicting the one on screen. */
   const defBeds=Math.max(1,Math.min(12,(cells.find(c=>c.t==='room')||{}).beds||4));
   WLAY={root:$('#wgLayEd'),cells,sel:null,numbered:true,tool:cells.length?'move':'hall',defBeds};
   LAY=WLAY;
-  $('#wgName').value=w?w.name:'';
+  $('#wgName').value=fresh?suggestWingName(b0.id,fl0):w.name;
   const sel=$('#wgBld'); sel.innerHTML='';
   for(const b of S.buildings){
     const o=document.createElement('option');
@@ -8470,8 +8493,10 @@ function openWing(id,bldId,floorId){
   sel.value=EDW.building;
   sel.parentElement.style.display=S.buildings.length>1?'':'none';
   fillWingFloors();
-  $('#wgDel').hidden=!w;
-  $('#wgStart').value=suggestStart();
+  $('#wgDel').hidden=!w||fresh;
+  /* an existing wing's own first number — suggesting the next free one made the
+     rebuild button renumber the whole wing */
+  $('#wgStart').value=fresh?suggestStart():(planRoomNums(cells)[0]||suggestStart());
   $('#wgCount').value=String(Math.max(1,layRooms().length||10));
   $('#wgBeds').value=String(defBeds);
   /* in the simple mode there is no drawing at all: no template gallery, no canvas.
@@ -8480,7 +8505,7 @@ function openWing(id,bldId,floorId){
   $('#wgTplPick').hidden=!pro;
   $('#wgLaySec').hidden=!pro;
   $('#wgRoomsH').innerHTML=pro
-    ? '📐 תבנית <span class="cnt">בוחרים פריסה — והאגף נבנה לבד</span>'
+    ? '🚪 החדרים וצורת הקומה <span class="cnt">כמו בדף שלכם</span>'
     : '🚪 החדרים <span class="cnt">כמה חדרים, כמה מיטות בכל אחד</span>';
   $('#wgApplyTpl').textContent=pro?'🧱 בניית הפריסה':'🚪 בניית החדרים';
   if(pro)renderTpls();
@@ -8489,12 +8514,27 @@ function openWing(id,bldId,floorId){
        A wing painted too freely for it opens in the grid, no questions asked. */
     setStrip(cellsToStrip(cells.map(c=>({...c}))));
     setLayView(STRIP?'strip':'grid');
+    if(fresh&&!cells.length)buildWing();
   }else renderLay();
   tplNote();
   $('#dlgWing').showModal();
   EDW.sig=wingSig();          /* what "nothing changed" looks like, for leaveWing */
-  if(!w)$('#wgName').focus();
+  if(fresh){const n=$('#wgName');n.focus();n.select();}
 }
+/* the shape a brand-new wing starts from: the yeshiva sheets Benyamin photographed
+   have the toilets and showers in the middle of the corridor */
+const DEFAULT_TPL='midservice';
+function suggestWingName(bid,fid){
+  const b=bldBy(bid),f=b&&b.floors.find(x=>x.id===fid);
+  const real=S.wings.filter(w=>w.building===bid&&w.floor===fid&&!isGhostWing(w));
+  /* the first wing on a floor is usually just called by the floor — "קומה ב׳" */
+  if(f&&!real.length&&!S.wings.some(w=>w.name===f.name))return f.name;
+  return nextWingName(bid);
+}
+const layKey=()=>JSON.stringify(((LAY&&LAY.cells)||[])
+  .map(c=>[c.t,c.x,c.y,c.w||1,c.h||1,String(c.num||''),c.beds||0,c.label||'']));
+/* still exactly what the last build produced — nothing edited by hand since */
+const wingUntouched=()=>!layRooms().length||(!!EDW&&EDW.built===layKey());
 /* the floor picker: only when there is a choice to make. The title names the floor,
    so "+ אגף בהמשך הקומה" visibly opens on the floor it was pressed on. */
 function fillWingFloors(){
@@ -8533,7 +8573,11 @@ function renderTpls(){
       EDW.tpl=t.id;
       /* a template of your own already knows how many rooms it has */
       if(!t.make)$('#wgCount').value=String(tplRoomCount(t)||1);
-      renderTpls();tplNote();
+      renderTpls();
+      /* while nothing was fixed by hand, a click on a shape simply shows it. Once
+         he has worked on the rooms, it only selects — the note says what the
+         build button would replace, and the build offers the way back. */
+      if(wingUntouched())buildWing(); else tplNote();
     });
     if(!t.make){          /* only the user's own templates can be edited from here */
       const x=el('button','tpl-x','✏️');
@@ -8546,30 +8590,48 @@ function renderTpls(){
   const more=el('button','tpl');
   const mtop=el('div','tpl-t');
   mtop.append(el('span','ti','📚'),el('b',null,'ניהול התבניות'));
-  more.append(mtop,el('div','tpl-d','עריכה, שכפול ובנייה של תבנית חדשה — כאן בונים קומה שנייה על בסיס הראשונה.'));
+  more.append(mtop,el('div','tpl-d','עריכה, שכפול ובנייה של תבנית חדשה משלכם.'));
   more.addEventListener('click',openTplMgr);
   box.appendChild(more);
 }
 function tplNote(){
   const n=$('#wgTplNote');
-  if(isPro()&&!EDW.tpl){n.textContent='בחרו תבנית כדי לבנות את הפריסה בבת אחת — או סדרו ידנית למטה.';return;}
+  const pro=isPro();
   const count=Math.max(1,Math.min(200,parseInt($('#wgCount').value,10)||1));
+  const beds=Math.max(1,Math.min(12,parseInt($('#wgBeds').value,10)||4));
   const nums=roomNums($('#wgStart').value,count);
-  const have=new Set(layRooms().map(c=>c.num));
-  const gone=[...have].filter(x=>!nums.includes(x));
-  let boys=0; for(const g of gone)boys+=occIn(g).length;
-  n.textContent=`ייבנו ${count} חדרים: ${nums[0]} עד ${nums[nums.length-1]}.`
-    +(gone.length?` ${gone.length} חדרים קיימים שאינם ברשימה יוסרו`+(boys?` ו־${boys} בחורים יחזרו לממתינים`:'')+'.':'');
+  const range=`${cnt(count,'חדרים')}, ${nums[0]} עד ${nums[nums.length-1]}, ${cnt(beds,'מיטות')} בכל חדר`;
+  const have=layRooms().length;
+  /* while typing already redraws the wing, the build button has nothing to add —
+     it only calls for attention once there is hand work it would replace */
+  $('#wgApplyTpl').classList.toggle('accent',!(pro&&have&&EDW.tpl&&wingUntouched()));
+  if(pro&&!EDW.tpl){
+    n.textContent=have?'כדי לבנות את האגף מחדש — לוחצים קודם על אחת הצורות למעלה.'
+                      :'לוחצים על אחת הצורות למעלה — והאגף ייבנה מיד.';
+    return;
+  }
+  if(pro&&have&&wingUntouched()){
+    n.textContent=`${range}. משנים כאן — והציור למטה מתעדכן מיד. אחר כך מתקנים חדר־חדר.`;
+    return;
+  }
+  const kept=new Set(nums);
+  const gone=layRooms().filter(c=>!kept.has(String(c.num)));
+  let boys=0; for(const g of gone)boys+=stripOcc(g).length;
+  n.textContent=(have?`"🧱 בניית הפריסה" תבנה את האגף מחדש: ${range}.`:`ייבנו ${range}.`)
+    +(have?' מה שתיקנתם ביד למטה יוחלף — ואפשר יהיה להחזיר.':'')
+    +(gone.length?` ${cnt(gone.length,'חדרים')} שלא ברשימה יוסרו`+(boys?` ו־${cnt(boys,'בחורים')} יחזרו לממתינים`:'')+'.':'');
 }
-['#wgCount','#wgBeds','#wgStart'].forEach(s=>$(s).addEventListener('input',tplNote));
+['#wgCount','#wgBeds','#wgStart'].forEach(s=>$(s).addEventListener('input',()=>{
+  /* what he types is what he sees, as long as nothing was fixed by hand yet */
+  if(isPro()&&EDW&&EDW.tpl&&EDW.built&&wingUntouched())buildWing(); else tplNote();
+}));
 $('#wgBeds').addEventListener('input',()=>{
   if(WLAY)WLAY.defBeds=Math.max(1,Math.min(12,parseInt($('#wgBeds').value,10)||4));
 });
-$('#wgApplyTpl').addEventListener('click',()=>{
+function buildWing(){
   const pro=isPro();
-  if(pro&&!EDW.tpl){toast('בחרו קודם תבנית');return;}
   const t=pro?[...WING_TEMPLATES,...S.templates].find(x=>x.id===EDW.tpl):null;
-  if(pro&&!t)return;
+  if(pro&&!t)return false;
   const count=Math.max(1,Math.min(200,parseInt($('#wgCount').value,10)||1));
   const beds=Math.max(1,Math.min(12,parseInt($('#wgBeds').value,10)||4));
   const nums=roomNums($('#wgStart').value,count);
@@ -8581,10 +8643,29 @@ $('#wgApplyTpl').addEventListener('click',()=>{
     .map(c=>c.t==='room'   /* keeps w/h from the template */
       ?{...c,orig:prev.get(c.num)||null}:c);
   LAY.sel=null;
-  renderLay(); tplNote(); stripAfterCellsChanged();
-  toast(pro
-    ? `הפריסה נבנתה — ${count} חדרים. אפשר לסדר אותם ברצועה או בכלי הציור`
-    : `${count} חדרים מוכנים. "💾 שמירת האגף" — והם ברשימה`);
+  renderLay(); stripAfterCellsChanged();
+  EDW.built=layKey();
+  tplNote(); wingBtns();
+  return true;
+}
+$('#wgApplyTpl').addEventListener('click',()=>{
+  const pro=isPro();
+  if(pro&&!EDW.tpl){
+    toast('קודם לוחצים על אחת הצורות למעלה');
+    $('#wgTpls').scrollIntoView({block:'center'});
+    return;
+  }
+  const before=wingUntouched()?null:JSON.stringify(LAY.cells);
+  if(!buildWing())return;
+  const n=layRooms().length;
+  const lost=pro&&tplPlan.lost?tplPlan.lost.length:0;
+  toast(pro?`האגף נבנה — ${cnt(n,'חדרים')}. לוחצים על חדר למטה כדי לתקן אותו.`
+             +(lost?`\n${lost===1?'משבצת שירות אחת לא נכנסה':lost+' משבצות שירות לא נכנסו'} — אין מקום בשורה.`:'')
+           :`${cnt(n,'חדרים')} מוכנים. "💾 שמירת האגף" — והם ברשימה`,
+    before?{label:'↩️ להחזיר את הקודם',fn:()=>{
+      LAY.cells=JSON.parse(before);LAY.sel=null;EDW.built=null;
+      renderLay();stripAfterCellsChanged();tplNote();wingBtns();
+    }}:undefined);
 });
 
 /* ================= the strip editor =================
@@ -8680,8 +8761,15 @@ function stripSync(){
     return false;
   }
   STRIP_OK=JSON.stringify(STRIP);
-  LAY.cells=stripToCells(STRIP);LAY.sel=null;tplNote();renderStrip();
+  LAY.cells=stripToCells(STRIP);LAY.sel=null;tplNote();renderStrip();wingBtns();
   return true;
+}
+/* the tools under the drawing appear once there is something to use them on, and
+   the straightening tool only where there is something crooked: the free drawing */
+function wingBtns(){
+  const row=$('#wgAutoLay').parentElement;
+  row.hidden=!isPro()||!(WLAY&&WLAY.cells.some(c=>c.t==='room'));
+  $('#wgAutoLay').hidden=!$('#wgStrip').hidden;
 }
 function setLayView(v,autoNote){
   const strip=v==='strip';
@@ -8691,6 +8779,7 @@ function setLayView(v,autoNote){
   $('#wgModeStrip').classList.toggle('accent',strip);
   $('#wgModeGrid').classList.toggle('accent',!strip);
   if(strip)renderStrip(); else renderLay();
+  wingBtns();
   if(autoNote)toast('את הפריסה הזו אפשר לערוך רק בציור החופשי — היא לא בנויה כשתי שורות פשוטות');
 }
 function stripAfterCellsChanged(){
@@ -8910,6 +8999,7 @@ const LE_MORE=['sink','stairs','elevator','madrich','study','kitchen','laundry',
 
 function renderLay(){
   if(!LAY)return;
+  if(LAY===WLAY)wingBtns();
   const root=LAY.root;
   let tools=root.querySelector('.le-tools');
   if(!tools){
@@ -9209,6 +9299,8 @@ function paintCellEd(){
 }
 
 $('#wgAutoLay').addEventListener('click',()=>{
+  if(!layRooms().length)return;
+  const before=JSON.stringify(LAY.cells);
   /* straighten whatever was drawn back into classic corridors; a floor too wide
      for one corridor wraps onto another one below — never off the grid edge */
   const rooms=layRooms().slice().sort((p,q)=>p.y-q.y||p.x-q.x);
@@ -9236,14 +9328,21 @@ $('#wgAutoLay').addEventListener('click',()=>{
     band++;
   }
   LAY.cells=out;
-  LAY.sel=null; renderLay();
-  toast('הפריסה יושרה למסדרון קלאסי — אפשר לעקם אותה מחדש כרצונכם');
+  LAY.sel=null;
+  /* straight is exactly what the sheet view shows — go there when it fits. The
+     old handler repainted only the hidden grid, so from the strip it changed what
+     would be saved while the screen stayed the same. */
+  const s=cellsToStrip(LAY.cells.map(c=>({...c})));
+  if(s){setStrip(s);setLayView('strip');} else renderLay();
+  tplNote();
+  toast('החדרים יושרו לשתי שורות לאורך מסדרון',{label:'↩️ להחזיר כמו שהיה',fn:()=>{
+    LAY.cells=JSON.parse(before);LAY.sel=null;setLayView('grid');tplNote();
+  }});
 });
 $('#wgSaveTpl').addEventListener('click',()=>{
   if(!LAY.cells.length){toast('אין מה לשמור — הפריסה ריקה');return;}
   openTplEdit({name:$('#wgName').value.trim()||'',ico:'⭐',desc:'',plan:packPlan(LAY.cells)},true);
 });
-$('#wgMgrTpl').addEventListener('click',openTplMgr);
 
 /* =====================================================================
    =========================  template library  ========================
@@ -9274,7 +9373,14 @@ function tplPlan(t,nums,defBeds){
   /* a built-in grows its corridor to the REAL room count — routing it through the
      8-room preview skeleton dumped every room past the eighth in a corridor-less
      block at the bottom */
-  const src=t.make?sidesToPlan(t.make(nums.map(String))):t.plan;
+  let src=t.plan;
+  tplPlan.lost=[];
+  if(t.make){
+    const sides=balanceSides(t.make(nums.map(String)));
+    /* whatever still does not fit is said out loud by the build, never just gone */
+    tplPlan.lost=[...sides.a.slice(PW-2),...sides.b.slice(PW-2)].filter(c=>c.t!=='room');
+    src=sidesToPlan(sides);
+  }
   const out=[];
   let i=0;
   const sorted=[...src].sort((p,q)=>p.y-q.y||p.x-q.x);
@@ -9414,8 +9520,7 @@ const closeWing=()=>{$('#dlgWing').close();};
    of laying out a floor gone because someone reached for the ✕ to "close" a window
    they thought was done. Every program he has ever used asks first. */
 function wingSig(){
-  return JSON.stringify([$('#wgName').value.trim(),EDW&&EDW.building,EDW&&EDW.floor,
-    ((LAY&&LAY.cells)||[]).map(c=>[c.t,c.x,c.y,c.w||1,c.h||1,String(c.num||''),c.beds||0,c.label||''])]);
+  return JSON.stringify([$('#wgName').value.trim(),EDW&&EDW.building,EDW&&EDW.floor,layKey()]);
 }
 const wingDirty=()=>!!EDW&&$('#dlgWing').open&&EDW.sig!==undefined&&wingSig()!==EDW.sig;
 function leaveWing(){
@@ -9442,7 +9547,7 @@ $('#wgSave').addEventListener('click',()=>{
   if(!layRooms().length&&$('#wgCount').value.trim()){
     const c=Math.max(0,Math.min(200,parseInt($('#wgCount').value,10)||0));
     if(c>0){
-      if(isPro()&&!EDW.tpl){toast('בחרו תבנית ולחצו "בניית הפריסה", או הורידו את מספר החדרים ל־0');return;}
+      if(isPro()&&!EDW.tpl){toast('באגף עוד אין חדרים — לוחצים על אחת הצורות למעלה, והאגף ייבנה');return;}
       $('#wgApplyTpl').click();
       if(!layRooms().length)return;      /* the build reported its own reason */
     }
