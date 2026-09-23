@@ -2116,10 +2116,12 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
     <div class="wel">
       <div class="wel-ico">🏠</div>
       <h3>ברוכים הבאים — הפרויקט עדיין ריק</h3>
-      <p>כדי להתחיל צריך את רשימת הבחורים ואת החדרים. הדרך המהירה: קובץ אקסל אחד עם הכול.</p>
+      <!-- the numbered process starts at step 1: the first button goes there. The
+           import used to be the bright one, and spoke only of Excel -->
+      <p>מתחילים בשלב 1 — החדרים. יש לכם כבר קובץ עם הבחורים והחדרים (אקסל, וורד או רשימה)? אפשר לייבא אותו במקום להקליד.</p>
       <div class="wel-btns">
-        <button class="btn accent" id="welImport">📥 ייבוא מקובץ</button>
-        <button class="btn" id="welWing">🧱 בניית אגף מתבנית</button>
+        <button class="btn accent" id="welWing">🏗️ לשלב 1 — החדרים</button>
+        <button class="btn" id="welImport">📥 ייבוא מקובץ</button>
         <button class="btn" id="welTemplate">📄 הורדת קובץ תבנית</button>
         <button class="btn" id="welManual">✏️ הזנת שמות ידנית</button>
         <button class="btn" id="welRestore">📂 שחזור מגיבוי</button>
@@ -11814,7 +11816,6 @@ function renderWelcome(){
   const empty=!S.boys.length&&!S.rooms.length;
   const wel=inProj&&SEC==='board'&&empty;
   $('#welcome').hidden=!wel;
-  $('#welWing').textContent=isPro()?'🧱 בניית אגף מתבנית':'🧱 הוספת אגף וחדרים';
   $('#guideBoard').style.display=wel?'none':'';
   $('#view').style.display=wel?'none':'';
   $('#mainTabs').hidden=!inProj;
@@ -11842,9 +11843,10 @@ $('#welManual').addEventListener('click',()=>{setTab('boys');$('#byNew').focus()
 $('#welWing').addEventListener('click',()=>{
   /* the simple mode has no template gallery — its wings are added straight on
      the structure page, so send people there with the cursor already waiting */
-  if(!isPro()){setTab('struct');const n=$('#bwName');if(n){n.focus();n.scrollIntoView({block:'center'});}return;}
+  setTab('struct');
+  if(!isPro()){const n=$('#bwName');if(n){n.focus();n.scrollIntoView({block:'center'});}return;}
   /* always a NEW wing: opening the seeded placeholder showed a name nobody chose */
-  openWing(null);
+  openWing(null,S.buildings[0].id);
 });
 
 /* ---------- settings panel ---------- */
