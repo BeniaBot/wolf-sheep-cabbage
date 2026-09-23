@@ -8098,6 +8098,30 @@ function setMode(m){
   toast(m==='basic'
     ? '📝 רשימה — האגפים והחדרים בלי שרטוט. השרטוט נשמר, ויחזור כשתעברו ל־✏️ שרטוט.'
     : '✏️ שרטוט — בניינים, קומות, וכל אגף כמו הדף שלכם.');
+  if(m==='pro')offerFloorsFromWings();
+}
+/* A list has no floors, so a list-mode "קומה ב" and "קומה ג" arrive in the drawing
+   as two wings of one floor called "קומה א׳". When every wing is plainly named after
+   a different floor, ask once whether to give each its own — nothing else changes. */
+function offerFloorsFromWings(){
+  if(S.buildings.length!==1)return;
+  const b=S.buildings[0];
+  const real=S.wings.filter(w=>!isGhostWing(w));
+  if(b.floors.length!==1||real.length<2)return;
+  const idx=real.map(w=>floorLetter(w.name));
+  if(idx.some(i=>i<0)||new Set(idx).size!==idx.length)return;
+  choose({title:'🏢 כל אגף בקומה משלו?',
+    lead:`האגפים ${real.map(w=>'"'+w.name+'"').join(', ')} נשמעים כמו קומות שונות. בשרטוט אפשר לשים כל אחד בקומה משלו.`,
+    opts:[{ico:'🏢',title:'כן — כל אגף בקומה משלו',sub:'נוצרות קומות בשמות האגפים. החדרים והשיבוץ לא משתנים',fn:()=>{
+            snapshot();
+            const order=real.slice().sort((p,q)=>floorLetter(p.name)-floorLetter(q.name));
+            b.floors=order.map((w,i)=>({id:i?'f'+uid():b.floors[0].id,name:w.name}));
+            order.forEach((w,i)=>{w.floor=b.floors[i].id;delete w.geom;});
+            S.wings.filter(w=>isGhostWing(w)).forEach(w=>{w.floor=b.floors[0].id;});
+            EDB=null;save();render();
+            toast(`נוצרו ${cnt(b.floors.length,'קומות')} — אחת לכל אגף`,{label:'↩️ להחזיר',fn:undo});
+          }}],
+    cancel:'לא — להשאיר את כולם באותה קומה'});
 }
 function renderModeBar(){
   const bar=$('#modeBar'); bar.innerHTML='';
