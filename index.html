@@ -1440,7 +1440,7 @@ body.nopulse .pb-room.warn-hard{animation:none}
 .le-more.on{border-color:var(--acc);color:var(--tx)}
 .lay{
   background:var(--sunk);border:1px solid var(--line);border-radius:16px;
-  padding:10px;overflow:auto;direction:ltr;
+  padding:10px;overflow:auto;direction:rtl;   /* a scroll starts where the wing starts */
 }
 .le-grid{
   position:relative;touch-action:pan-x pan-y;
@@ -1451,6 +1451,13 @@ body.nopulse .pb-room.warn-hard{animation:none}
     linear-gradient(to bottom,var(--line) 1px,transparent 1px);
   background-size:26px 26px;border-radius:8px;
 }
+/* the free drawing reads right to left, like the strip, the board and the sheet on
+   the wall — it used to show every wing mirrored, room 201 on the left here and on
+   the right everywhere else. The coordinates stay; only the picture turns, and the
+   pointer maths reads from the right edge (cellXY / cellAt). */
+.le-grid,.canvas-in{transform:scaleX(-1)}
+.le-c>span{transform:scaleX(-1)}
+.canvas-in .slabel{transform:translate(-50%,-50%) scaleX(-1)}
 .le-grid.tool-paint{cursor:crosshair}
 .le-grid.tool-erase{cursor:not-allowed}
 .le-grid.tool-move{cursor:grab}
@@ -5044,8 +5051,10 @@ function pbRoom(room,ev,at,c){
   const edges=[
     ['dN',Array.from({length:W},(_,i)=>[c.x+i,c.y-1])],
     ['dS',Array.from({length:W},(_,i)=>[c.x+i,c.y+H])],
-    ['dE',Array.from({length:H},(_,i)=>[c.x+W,c.y+i])],
-    ['dW',Array.from({length:H},(_,i)=>[c.x-1,c.y+i])]
+    /* the board draws the plan mirrored, right to left: a corridor on the logical
+       east is on the screen's WEST — the notch was drawn on the wall facing away */
+    ['dW',Array.from({length:H},(_,i)=>[c.x+W,c.y+i])],
+    ['dE',Array.from({length:H},(_,i)=>[c.x-1,c.y+i])]
   ];
   for(const [side,probes] of edges)if(hallOn(probes)){d.classList.add(side);break;}
   d.append(el('span','no',room.num),
@@ -8472,7 +8481,7 @@ function barEl(w,edit){
   window.__bldClearAnchor=clearAnchor;
   const cellAt=e=>{
     const r=grid.getBoundingClientRect();
-    return {x:clampI(Math.floor((e.clientX-r.left)/CELL),0,GW-1),
+    return {x:clampI(Math.floor((r.right-e.clientX)/CELL),0,GW-1),       /* mirrored */
             y:clampI(Math.floor((e.clientY-r.top)/CELL),0,GH-1)};
   };
   const wingAt=(b,c)=>floorWings(b.id,EDB.floor).find(w=>w.geom&&geomSet(w.geom).has(c.x+','+c.y))||null;
@@ -9363,7 +9372,7 @@ function wireLeGrid(grid){
   grid.__dropAnchor=dropAnchor;
   const cellXY=e=>{
     const r=grid.getBoundingClientRect();
-    return {x:clampI(Math.floor((e.clientX-r.left)/LE_CELL),0,PW-1),
+    return {x:clampI(Math.floor((r.right-e.clientX)/LE_CELL),0,PW-1),   /* mirrored */
             y:clampI(Math.floor((e.clientY-r.top)/LE_CELL),0,PH-1)};
   };
   const applyRect=(a,b)=>{
