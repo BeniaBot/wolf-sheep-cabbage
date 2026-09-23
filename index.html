@@ -3475,8 +3475,10 @@ function migrate(s){
   /* ---- floors, and where each wing sits on its floor ---- */
   s.buildings.forEach(b=>{
     b.floors=(Array.isArray(b.floors)?b.floors:[]).filter(f=>f&&f.id!=null)
-      .map(f=>({id:String(f.id),name:String(f.name||'קומה').trim().slice(0,30)||'קומה'}));
-    if(!b.floors.length)b.floors=[{id:'f'+b.id,name:'קומה א׳'}];
+      .map(f=>({id:String(f.id),name:String(f.name||'קומה').trim().slice(0,30)||'קומה',
+                /* a name the app chose, not the user — see floorNamedByWing */
+                ...(f.auto?{auto:true}:{})}));
+    if(!b.floors.length)b.floors=[{id:'f'+b.id,name:'קומה א׳',auto:true}];
   });
   const floorHome=new Map();
   s.buildings.forEach(b=>b.floors.forEach(f=>floorHome.set(f.id,b.id)));
@@ -7884,19 +7886,41 @@ function layoutFloorSequence(bid,fid,ids){
 /* floors are named the way a yeshiva names them — קומה א׳, ב׳, ג׳ — not "קומה 2"
    next to a first floor called "קומה" */
 const HEB_ORD=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ז׳','ח׳','ט׳','י׳','י״א','י״ב','י״ג','י״ד','ט״ו','ט״ז','י״ז','י״ח','י״ט','כ׳'];
+/* "קומה ב", "קומה ב׳" and "קומה ב'" are the same floor letter */
+const floorLetter=nm=>{
+  const m=String(nm||'').trim().match(/^קומה\s+(.+)$/);
+  if(!m)return -1;
+  const k=m[1].replace(/[׳״'"`\s]/g,'');
+  return HEB_ORD.findIndex(h=>h.replace(/[׳״]/g,'')===k);
+};
 function nextFloorName(b){
   /* the lone default floor of an older project was just "קומה" — nobody chose that */
   if(b.floors.length===1&&b.floors[0].name==='קומה')b.floors[0].name='קומה א׳';
   const used=new Set(b.floors.map(f=>f.name));
-  for(const h of HEB_ORD){const nm='קומה '+h;if(!used.has(nm))return nm;}
+  const taken=new Set(b.floors.map(f=>floorLetter(f.name)).filter(i=>i>=0));
+  /* the letter after the highest one in use: after "קומה ב" comes ג׳, not א׳ */
+  const top=Math.max(-1,...taken);
+  for(let i=top+1;i<HEB_ORD.length;i++){const nm='קומה '+HEB_ORD[i];if(!taken.has(i)&&!used.has(nm))return nm;}
+  for(let i=0;i<HEB_ORD.length;i++){const nm='קומה '+HEB_ORD[i];if(!taken.has(i)&&!used.has(nm))return nm;}
   let k=b.floors.length+1; while(used.has('קומה '+k))k++;
   return 'קומה '+k;
+}
+/* A floor still wearing the name the app gave it takes the name of its first wing,
+   when that wing is named like a floor. He types "קומה ב" off his paper; a tab
+   reading "קומה א׳" around it was the screen contradicting the sheet — and every
+   floor copied from it inherited the contradiction. */
+function floorNamedByWing(w){
+  const b=bldBy(w.building),f=b&&b.floors.find(x=>x.id===w.floor);
+  if(!f||!f.auto||floorLetter(w.name)<0)return;
+  const real=S.wings.filter(x=>x.building===w.building&&x.floor===w.floor&&!isGhostWing(x));
+  if(real.length!==1||b.floors.some(x=>x!==f&&x.name===w.name))return;
+  f.name=w.name; delete f.auto;
 }
 function renameFloor(b,f){
   if(!f)return;
   const nn=prompt('שם הקומה:',f.name);
   if(!nn||!nn.trim()||nn.trim()===f.name)return;
-  snapshot(); f.name=nn.trim().slice(0,30);
+  snapshot(); f.name=nn.trim().slice(0,30); delete f.auto;
   save();bldPaint();render();
   toast('שם הקומה עודכן',{label:'↩️ להחזיר',fn:undo});
 }
@@ -7938,11 +7962,12 @@ function copyFloor(b,src){
     if(rooms.every(r=>{const n=shift(r.num,100*k);return n&&!roomBy(n);}))off=100*k;
   if(!off){toast('אי אפשר להעתיק את הקומה אוטומטית — מספרי החדרים בה אינם מספרים.\nמוסיפים קומה ובונים את האגפים שלה.');return;}
   snapshot();
-  const f={id:'f'+uid(),name:nextFloorName(b)};
+  const f={id:'f'+uid(),name:nextFloorName(b),auto:true};
   b.floors.push(f);
   const wname=w=>{
     let nm;
-    if(w.name===src.name)nm=f.name;
+    /* a wing named after its floor is named after the new floor */
+    if(w.name===src.name||(floorLetter(w.name)>=0&&floorLetter(w.name)===floorLetter(src.name)))nm=f.name;
     else{
       const m=w.name.match(/^(.*?)(\d{3,})(\D*)$/);      /* "אגף 200" → "אגף 300" */
       nm=m?m[1]+(+m[2]+off)+m[3]:w.name+' · '+f.name;
@@ -8394,7 +8419,7 @@ function bldPaint(){
   const add=el('button','btn mini','+ קומה');
   add.addEventListener('click',()=>{
     snapshot();
-    const f={id:'f'+uid(),name:nextFloorName(b)};
+    const f={id:'f'+uid(),name:nextFloorName(b),auto:true};
     dropBldAnchor();
     b.floors.push(f); EDB.floor=f.id; EDB.sel=null;
     save();bldPaint();render();
@@ -8697,7 +8722,7 @@ $('#bldSave').addEventListener('click',()=>{
   }
   /* a new building lands straight on the structure page, ready to draw */
   const b={id:'bld'+uid(),name:nm,icon:EDB.icon,
-           floors:[{id:'f'+uid(),name:'קומה א׳'}]};
+           floors:[{id:'f'+uid(),name:'קומה א׳',auto:true}]};
   S.buildings.push(b);
   STR.bld=b.id; EDB={id:b.id,icon:b.icon,floor:b.floors[0].id,sel:null};
   save();$('#dlgBld').close();
@@ -9953,6 +9978,7 @@ $('#wgSave').addEventListener('click',()=>{
     return S.boys.includes(r.a)&&S.rooms.some(x=>x.num===r.room);
   });
   if(toEnd)appendWingToFloor(w);
+  floorNamedByWing(w);
   syncLayouts();
   S.activeSim=null;
   save(); closeWing(); initDynamic();
