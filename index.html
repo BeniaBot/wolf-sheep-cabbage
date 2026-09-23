@@ -2567,7 +2567,7 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
 
     </div>
     <div class="dlg-foot">
-      <button class="btn accent" id="wgSave">שמירה</button>
+      <button class="btn accent" id="wgSave">💾 שמירת האגף</button>
       <button class="btn" id="wgCancel">ביטול</button>
       <span class="ab-sp"></span>
       <button class="btn danger-btn" id="wgDel" hidden>🗑️ מחיקת האגף</button>
@@ -3811,7 +3811,9 @@ const DRAFT_RESET={
   dlgWing(){
     if($('#dlgTplEdit').open)return;   /* template editor stacked above stays live */
     EDW=null;WLAY=null;LAY=TLAY||null;
-  }
+  },
+  /* choose() words its way out per question; the next user gets the plain one back */
+  dlgClear(){$('#clearCancel').textContent=CLEAR_CANCEL;}
 };
 function topDialog(){
   for(let i=DLG_STACK.length-1;i>=0;i--){
@@ -5708,6 +5710,23 @@ document.addEventListener('dragover',e=>{
    the app's own safety net, but it lives behind section 5 under a name a first-time
    user does not connect to "don't lose my work" — so we offer it at the moment the
    work is about to disappear, which is the only moment he is thinking about it. */
+/* One question with named answers, on the same dialog as the clear-board choice.
+   The footer button is always the safe way out, and says what it does. */
+function choose({title,lead,opts,cancel}){
+  $('#clearTtl').textContent=title;
+  $('#clearLead').textContent=lead;
+  $('#clearCancel').textContent=cancel||CLEAR_CANCEL;
+  const box=$('#clearOpts'); box.innerHTML='';
+  for(const o of opts){
+    const b=document.createElement('button');
+    b.className='opt'+(o.danger?' danger-opt':'');
+    b.innerHTML=`<span class="oi">${o.ico}</span><span class="ot"><b>${esc(o.title)}</b><small>${esc(o.sub||'')}</small></span>`;
+    b.addEventListener('click',()=>{$('#dlgClear').close();o.fn();});
+    box.appendChild(b);
+  }
+  $('#dlgClear').showModal();
+}
+const CLEAR_CANCEL='ביטול — לא לעשות כלום';
 function offerKeepCopy(then){
   const placed=Object.keys(S.assign).length;
   if(!placed||S.settings.confirm===false)return then();
@@ -8459,6 +8478,7 @@ function openWing(id,bldId,floorId){
   }else renderLay();
   tplNote();
   $('#dlgWing').showModal();
+  EDW.sig=wingSig();          /* what "nothing changed" looks like, for leaveWing */
   if(!w)$('#wgName').focus();
 }
 /* the floor picker: only when there is a choice to make. The title names the floor,
@@ -8550,7 +8570,7 @@ $('#wgApplyTpl').addEventListener('click',()=>{
   renderLay(); tplNote(); stripAfterCellsChanged();
   toast(pro
     ? `הפריסה נבנתה — ${count} חדרים. אפשר לסדר אותם ברצועה או בכלי הציור`
-    : `${count} חדרים מוכנים. שמירה — והם ברשימה`);
+    : `${count} חדרים מוכנים. "💾 שמירת האגף" — והם ברשימה`);
 });
 
 /* ================= the strip editor =================
@@ -9300,8 +9320,25 @@ $('#teSave').addEventListener('click',()=>{
   toast(i>=0?'התבנית עודכנה ⭐':'התבנית נשמרה ⭐ — תופיע מעכשיו בכל אגף');
 });
 const closeWing=()=>{$('#dlgWing').close();};
-$('#wgCancel').addEventListener('click',closeWing);
-$('#wgX').addEventListener('click',closeWing);
+/* ביטול, ✕ and Esc used to throw the whole draft away without a word — ten minutes
+   of laying out a floor gone because someone reached for the ✕ to "close" a window
+   they thought was done. Every program he has ever used asks first. */
+function wingSig(){
+  return JSON.stringify([$('#wgName').value.trim(),EDW&&EDW.building,EDW&&EDW.floor,
+    ((LAY&&LAY.cells)||[]).map(c=>[c.t,c.x,c.y,c.w||1,c.h||1,String(c.num||''),c.beds||0,c.label||''])]);
+}
+const wingDirty=()=>!!EDW&&$('#dlgWing').open&&EDW.sig!==undefined&&wingSig()!==EDW.sig;
+function leaveWing(){
+  if(!wingDirty()){closeWing();return;}
+  choose({title:'💾 לשמור את השינויים באגף?',
+    lead:'יש בחלון הזה שינויים שעוד לא נשמרו.',
+    opts:[{ico:'💾',title:'לשמור את האגף',sub:'השינויים יישמרו והחלון ייסגר',fn:()=>$('#wgSave').click()},
+          {ico:'🗑️',title:'לצאת בלי לשמור',sub:'כל מה ששונה בחלון הזה לא יישמר',fn:closeWing,danger:true}],
+    cancel:'⬅️ לחזור לעריכת האגף'});
+}
+$('#wgCancel').addEventListener('click',leaveWing);
+$('#wgX').addEventListener('click',leaveWing);
+$('#dlgWing').addEventListener('cancel',e=>{if(wingDirty()){e.preventDefault();leaveWing();}});
 $('#wgBld').addEventListener('change',()=>{EDW.building=$('#wgBld').value;fillWingFloors();});
 $('#wgFloor').addEventListener('change',()=>{EDW.floor=$('#wgFloor').value;wingTitle();});
 $('#wgName').addEventListener('input',()=>{});
