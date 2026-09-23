@@ -2172,9 +2172,9 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
 <div class="vpane" data-v="sims">
 <div id="guideSims"></div>
 <section class="panel">
-  <h2>🗂️ סימולציות שמורות</h2>
+  <h2>🗂️ גרסאות שמורות</h2>
   <div class="savebar">
-    <input type="text" id="simName" placeholder="שם לסימולציה הנוכחית…" style="min-width:210px">
+    <input type="text" id="simName" placeholder="שם לגרסה הנוכחית…" style="min-width:210px">
     <button class="btn accent" id="btnSaveSim">📌 שמירת המצב הנוכחי</button>
   </div>
   <div id="simsBar"></div>
@@ -2184,7 +2184,7 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
 <footer>
   לחיצה על בחור פותחת למטה את כל החדרים — לחיצה על חדר משבצת אותו, בלי גלילה ובלי גרירה.<br>
   אפשר כמובן גם לגרור · לחיצה כפולה מחזירה לממתינים · 🔓 על בחור משובץ נועל אותו במקומו<br>
-  <kbd>/</kbd> חיפוש · <kbd>Ctrl+Z</kbd> ביטול · <kbd>Ctrl+S</kbd> שמירת סימולציה · <kbd>Esc</kbd> ביטול סימון · <kbd>Backspace</kbd> חזרה אחורה
+  <kbd>/</kbd> חיפוש · <kbd>Ctrl+Z</kbd> ביטול · <kbd>Ctrl+S</kbd> שמירת גרסה · <kbd>Esc</kbd> ביטול סימון · <kbd>Backspace</kbd> חזרה אחורה
 </footer>
 
 <aside id="rail">
@@ -2268,7 +2268,7 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
       <div class="ed-sec">
         <h4>💾 גיבוי ושחזור</h4>
         <p class="hint">הגיבוי כולל את הפרויקט כולו — בחורים, מבנה, כללים, קבוצות, הערות
-          וסימולציות. מפתח היועץ לא נכלל.</p>
+          וגרסאות. מפתח היועץ לא נכלל.</p>
         <div class="dlgbtns wrap">
           <button class="btn accent" id="dtBackup">💾 שמירת גיבוי לקובץ</button>
           <button class="btn" id="dtRestore">📂 שחזור מגיבוי</button>
@@ -2301,7 +2301,7 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
       <button class="dlg-x" id="trX" title="סגירה">✕</button></div>
     <div class="dlg-body">
       <p class="hint">כל מה שנמחק ממתין כאן — בחורים, חדרים, אגפים, בניינים, כללים, קבוצות,
-        סימולציות ותבניות. השחזור מחזיר גם את מה שהיה בפנים.</p>
+        גרסאות ותבניות. השחזור מחזיר גם את מה שהיה בפנים.</p>
       <div id="trList"></div>
     </div>
     <div class="dlg-foot">
@@ -2793,7 +2793,7 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
     <div class="tabpane" data-p="data">
       <div class="ed-sec">
         <h4>💾 גיבוי ושחזור</h4>
-        <p class="hint">הגיבוי כולל בחורים, אגפים, חדרים, שיבוץ, נעילות, כללים, סימולציות והגדרות — הכול בקובץ אחד. המפתח של היועץ לא נכלל.</p>
+        <p class="hint">הגיבוי כולל בחורים, אגפים, חדרים, שיבוץ, נעילות, כללים, גרסאות והגדרות — הכול בקובץ אחד. המפתח של היועץ לא נכלל.</p>
         <div class="dlgbtns">
           <button class="btn" id="setExport">💾 שמירת גיבוי</button>
           <button class="btn" id="setImport">📂 שחזור מגיבוי</button>
@@ -2810,7 +2810,7 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
         <div class="dlgbtns wrap">
           <button class="btn" id="rstAssign">ניקוי שיבוץ בלבד</button>
           <button class="btn" id="rstRules">מחיקת כל הכללים</button>
-          <button class="btn" id="rstSims">מחיקת כל הסימולציות</button>
+          <button class="btn" id="rstSims">מחיקת כל הגרסאות</button>
         </div>
         <div class="dlgbtns wrap">
           <button class="btn danger-btn" id="rstAll">🗑️ איפוס מלא — הכול לברירת המחדל</button>
@@ -5359,7 +5359,7 @@ function renderSims(){
   const bar=$('#simsBar'); bar.innerHTML='';
   if(!S.sims.length){
     const d=document.createElement('div'); d.className='empty-note';
-    d.textContent='אין עדיין סימולציות שמורות. שבצו, תנו שם ושמרו — ואז אפשר לעבור בין גרסאות ולהשוות במבט אחד.';
+    d.textContent='אין עדיין גרסאות שמורות. שבצו, תנו שם ושמרו — ואז אפשר לעבור בין גרסאות ולהשוות במבט אחד.';
     bar.appendChild(d); return;
   }
   S.sims.forEach((sim,idx)=>{
@@ -5374,7 +5374,7 @@ function renderSims(){
     nm.title='לחיצה כפולה — שינוי שם';
     const renameSim=e=>{
       e.stopPropagation();
-      const nn=prompt('שם חדש לסימולציה:',sim.name);
+      const nn=prompt('שם חדש לגרסה:',sim.name);
       if(nn&&nn.trim()){snapshot();sim.name=nn.trim();save();render();}
     };
     nm.addEventListener('dblclick',renameSim);
@@ -5400,18 +5400,18 @@ function renderSims(){
     btns.appendChild(bRen);
     const bLoad=document.createElement('button'); bLoad.className='btn mini'; bLoad.textContent='טעינה';
     bLoad.addEventListener('click',e=>{e.stopPropagation();loadSim(sim);});
-    const bUpd=document.createElement('button'); bUpd.className='btn mini'; bUpd.textContent='עדכון'; bUpd.title='דריסת הסימולציה במצב הנוכחי';
+    const bUpd=document.createElement('button'); bUpd.className='btn mini'; bUpd.textContent='עדכון'; bUpd.title='דריסת הגרסה במצב הנוכחי';
     bUpd.addEventListener('click',e=>{
       e.stopPropagation();
       if(!askConfirm(`לדרוס את "${sim.name}" במצב שעל הלוח עכשיו?`))return;
       snapshot();
-      sim.assign={...S.assign}; sim.ts=Date.now(); S.activeSim=sim.id;
+      sim.assign={...S.assign}; sim.locks=[...S.locks]; sim.ts=Date.now(); S.activeSim=sim.id;
       save();render();toast(`"${sim.name}" עודכנה למצב הנוכחי — ↩️ ביטול מחזיר`);
     });
     const bDel=document.createElement('button'); bDel.className='btn mini danger'; bDel.textContent='✕';
     bDel.addEventListener('click',e=>{
       e.stopPropagation();
-      if(confirm(`למחוק את הסימולציה "${sim.name}"?`)){
+      if(confirm(`למחוק את הגרסה "${sim.name}"?`)){
         snapshot();
         trashPut('sim',sim.name,`${S.boys.filter(b2=>sim.assign[b2]).length} משובצים`,{sim:JSON.parse(JSON.stringify(sim))});
         S.sims=S.sims.filter(x=>x.id!==sim.id);
@@ -5431,7 +5431,8 @@ function loadSim(sim){
   for(const[b,rm]of Object.entries(sim.assign))
     if(S.boys.includes(b)&&roomBy(rm)) asg[b]=rm;
   S.assign=asg; S.activeSim=sim.id; selected=null;
-  S.locks=S.locks.filter(b=>asg[b]);
+  /* a version remembers its own 🔒 — older ones without that keep today's locks */
+  S.locks=(Array.isArray(sim.locks)?sim.locks:S.locks).filter(b=>asg[b]);
   save();render();toast(`נטענה: "${sim.name}"`);
 }
 
@@ -5824,16 +5825,18 @@ function choose({title,lead,opts,cancel}){
   $('#dlgClear').showModal();
 }
 const CLEAR_CANCEL='ביטול — לא לעשות כלום';
-function offerKeepCopy(then){
+function offerKeepCopy(then,what){
   const placed=Object.keys(S.assign).length;
-  if(!placed||S.settings.confirm===false)return then();
+  if(!placed||S.settings.confirm===false)return then(null);
   const auto=()=>{
     const base=`הסידור מ־${new Date().toLocaleDateString('he-IL')}`;
     let nm=base,k=2;
     while(S.sims.some(s=>s.name===nm))nm=base+' ('+(k++)+')';
     return nm;
   };
-  $('#clearTtl').textContent='💾 לשמור עותק לפני?';
+  /* titled by what is about to happen — the question alone ('לשמור עותק לפני?')
+     never said before WHAT */
+  $('#clearTtl').textContent=what?what+' — לשמור עותק לפני?':'💾 לשמור עותק לפני?';
   $('#clearLead').textContent=
     `על הלוח ${cnt(placed,'בחורים')} מסודרים. אפשר לשמור אותם בצד לפני שמתחילים מחדש — ואז תמיד אפשר לחזור לסידור הזה.`;
   const box=$('#clearOpts'); box.innerHTML='';
@@ -5849,27 +5852,29 @@ function offerKeepCopy(then){
       ()=>{
         const nm=auto();
         snapshot();
-        S.sims.push({id:'s'+uid(),name:nm,assign:{...S.assign},ts:Date.now()});
+        /* the locks are part of the arrangement: a copy without them came back with
+           every 🔒 gone */
+        S.sims.push({id:'s'+uid(),name:nm,assign:{...S.assign},locks:[...S.locks],ts:Date.now()});
         save();
-        toast(`נשמר עותק בשם "${nm}" — נמצא במדור 5`);
-        then();
+        then(nm);        /* one message for both steps — this one used to be replaced at once */
       });
   opt('➡️','להמשיך בלי לשמור',
       'הסידור הנוכחי לא יישמר — אבל ↩️ ביטול עדיין מחזיר אותו מיד',
-      ()=>then(),true);
+      ()=>then(null),true);
   $('#dlgClear').showModal();
 }
-function doClear(mode){
+function doClear(mode,kept){
   snapshot();
+  const copy=kept?` · עותק נשמר בשם "${kept}" במדור 5`:'';
   if(mode==='keep'){
     const keep={};
     for(const b of S.locks) if(S.assign[b]) keep[b]=S.assign[b];
     S.assign=keep;
-    toast('הלוח נוקה — הנעולים נשארו במקומם');
+    toast('כולם הוצאו מהחדרים — הנעולים נשארו במקומם'+copy);
   }else{
     S.assign={};
-    if(mode==='all'){S.locks=[];toast('הלוח נוקה לגמרי — כולל הנעולים 🔓');}
-    else toast('הלוח נוקה');
+    if(mode==='all'){S.locks=[];toast('כולם הוצאו מהחדרים, כולל הנעולים 🔓'+copy);}
+    else toast('כולם הוצאו מהחדרים'+copy);
   }
   S.activeSim=null;selected=null;save();render();
 }
@@ -5877,9 +5882,10 @@ $('#btnClear').addEventListener('click',()=>{
   if(!Object.keys(S.assign).length){toast('הלוח כבר ריק');return;}
   const lockedN=S.locks.filter(b=>S.assign[b]).length;
   if(!lockedN){
-    if(askConfirm('להוריד את כל הבחורים מהחדרים ולהתחיל את הסידור מחדש?\n\n'
-      +'רשימת השמות, החדרים והכללים נשארים — מתרוקן רק מי ישן איפה.\n'
-      +'אם תתחרטו, אפשר להחזיר מיד בכפתור ↩️ ביטול שלמעלה.'))offerKeepCopy(()=>doClear('plain'));
+    /* one question, not two in a row: the keep-a-copy choice already says what is
+       about to happen, and its footer is the way out */
+    if(S.settings.confirm===false){doClear('plain');return;}
+    offerKeepCopy(nm=>doClear('plain',nm),'🧹 הוצאת כולם מהחדרים');
     return;
   }
   $('#clearTtl').textContent='🧹 הוצאת הבחורים מהחדרים';
@@ -5895,9 +5901,9 @@ $('#btnClear').addEventListener('click',()=>{
     box.appendChild(b);
   };
   opt('🔒','להשאיר את הנעולים במקומם',
-      `${lockedN} הבחורים הנעולים יישארו בחדריהם, כל השאר יתפנו`,()=>offerKeepCopy(()=>doClear('keep')));
+      `${lockedN} הבחורים הנעולים יישארו בחדריהם, כל השאר יתפנו`,()=>offerKeepCopy(nm=>doClear('keep',nm),'🧹 הוצאת כולם מהחדרים'));
   opt('🔓','לנקות הכול — כולל הנעולים',
-      'הלוח יתרוקן לגמרי וכל הנעילות יוסרו — התחלה נקייה מאפס',()=>offerKeepCopy(()=>doClear('all')),true);
+      'הלוח יתרוקן לגמרי וכל הנעילות יוסרו — התחלה נקייה מאפס',()=>offerKeepCopy(nm=>doClear('all',nm),'🧹 הוצאת כולם מהחדרים'),true);
   $('#dlgClear').showModal();
 });
 $('#clearCancel').addEventListener('click',()=>$('#dlgClear').close());
@@ -6005,13 +6011,13 @@ $('#btnAuto').addEventListener('click',()=>{
         ()=>runAuto(new Set([...locked0,...unlockedPlaced])));
     opt('🔄','לשבץ הכול מחדש מאפס',
         'הסידור הידני שעשיתם יימחק והתוכנה תתחיל מדף חלק — אפשר להחזיר ב-↩️ ביטול',
-        ()=>offerKeepCopy(()=>runAuto(locked0)),true);
+        ()=>offerKeepCopy(nm=>runAuto(locked0,nm),'🤖 שיבוץ מחדש מאפס'),true);
     $('#dlgClear').showModal();
     return;
   }
   runAuto(locked0);
 });
-function runAuto(locked){
+function runAuto(locked,kept){
   const btn=$('#btnAuto');
   btn.disabled=true;btn.textContent='⏳ מחשב…';
   /* the search can block the thread for a moment. Yielding a frame first lets the
@@ -6035,12 +6041,16 @@ function runAuto(locked){
     const bedNote=res.short
       ? `שובצו ${placed} מתוך ${total} — חסרות ${res.short} מיטות, השאר בהמתנה`
       : null;
+    /* the way back rides in the message, and so does the copy that was kept */
+    const tail=kept?`
+הסידור הקודם נשמר בשם "${kept}" במדור 5`:'';
+    const back={label:'↩️ להחזיר את מה שהיה',fn:undo};
     if(res.score===0)
-      toast(bedNote||(S.rules.some(r=>r.enabled!==false)
-        ?'שיבוץ נקי — כל הכללים מתקיימים ✨':'כולם שובצו ✨'));
+      toast((bedNote||(S.rules.some(r=>r.enabled!==false)
+        ?'שיבוץ נקי — כל הכללים מתקיימים ✨':'כולם שובצו ✨'))+tail,back);
     else
       toast((bedNote?bedNote+'. ':'זה המיטב שמצאתי — ')
-        +`נשארו ${res.ev.hard} הפרות חמורות ו־${res.ev.soft} קלות. ראו הצעות למטה`);
+        +`נשארו ${res.ev.hard} הפרות חמורות ו־${res.ev.soft} קלות. ראו הצעות למטה`+tail,back);
   };
   requestAnimationFrame(()=>setTimeout(go,0));
   setTimeout(go,120);
@@ -6052,8 +6062,8 @@ $('#simName').addEventListener('keydown',e=>{
 });
 $('#btnSaveSim').addEventListener('click',()=>{
   const inp=$('#simName');
-  const name=(inp.value.trim())||`סימולציה ${S.sims.length+1}`;
-  const sim={id:uid(),name,ts:Date.now(),assign:{...S.assign}};
+  const name=(inp.value.trim())||`גרסה ${S.sims.length+1}`;
+  const sim={id:uid(),name,ts:Date.now(),assign:{...S.assign},locks:[...S.locks]};
   /* sims are undo-tracked: without this the next Ctrl+Z restores a world where
      the simulation was never saved, and it vanishes */
   snapshot();
@@ -6395,7 +6405,7 @@ function openData(){
     ['בניינים',S.buildings.length,''],['אגפים',S.wings.length,''],
     ['חדרים',S.rooms.length,''],['מיטות',S.rooms.reduce((a,r)=>a+r.beds,0),''],
     ['כללים',S.rules.length,''],['קבוצות',S.groups.length,''],
-    ['סימולציות',S.sims.length,''],['הערות',Object.keys(S.notes).length,''],
+    ['גרסאות',S.sims.length,''],['הערות',Object.keys(S.notes).length,''],
     ['תבניות',S.templates.length,''],['הפרות',ev.hard+ev.soft,(ev.hard+ev.soft)?'warnv':'okv']
   ];
   $('#dtStats').innerHTML='';
@@ -6484,7 +6494,7 @@ function findRows(q){
   }
   for(const sim of S.sims){
     if(!hits(sim.name,q))continue;
-    add('🗂️','סימולציה',sim.name,`${S.boys.filter(b=>sim.assign[b]).length} משובצים`,
+    add('🗂️','גרסה',sim.name,`${S.boys.filter(b=>sim.assign[b]).length} משובצים`,
         ()=>{setTab('sims');});
   }
   for(const [k,v] of Object.entries(S.notes)){
@@ -6556,7 +6566,7 @@ function trashPut(kind,label,detail,data){
   if(S.trash.length>60)S.trash=S.trash.slice(-60);
 }
 const TRASH_HE={boy:'בחור',room:'חדר',wing:'אגף',building:'בניין',
-                rule:'כלל',group:'קבוצה',sim:'סימולציה',template:'תבנית'};
+                rule:'כלל',group:'קבוצה',sim:'גרסה',template:'תבנית'};
 const TRASH_ICO={boy:'👤',room:'🚪',wing:'🏗️',building:'🏢',
                  rule:'⚖️',group:'🎓',sim:'🗂️',template:'⭐'};
 function restoreTrash(id){
@@ -6636,7 +6646,7 @@ function restoreTrash(id){
       S.groups.push(g);
       msg=`"${g.name}" הוחזרה`;
     }else if(t.kind==='sim'){
-      if(S.sims.some(x=>x.id===d.sim.id)){toast('הסימולציה כבר קיימת');return;}
+      if(S.sims.some(x=>x.id===d.sim.id)){toast('הגרסה כבר קיימת');return;}
       S.sims.push({...d.sim});
       msg=`"${d.sim.name}" הוחזרה`;
     }else if(t.kind==='template'){
@@ -6656,7 +6666,7 @@ function renderTrash(){
   $('#trCnt').textContent=S.trash.length?`${S.trash.length} פריטים`:'ריק';
   $('#trEmpty').hidden=!S.trash.length;
   if(!S.trash.length){
-    box.appendChild(el('div','blank-sm','אין כאן כלום. כל מה שתמחקו — בחור, חדר, אגף, כלל, קבוצה או סימולציה — ימתין כאן עד שתרוקנו.'));
+    box.appendChild(el('div','blank-sm','אין כאן כלום. כל מה שתמחקו — בחור, חדר, אגף, כלל, קבוצה או גרסה — ימתין כאן עד שתרוקנו.'));
     return;
   }
   for(const t of [...S.trash].reverse()){
@@ -6698,7 +6708,7 @@ const KEYS=[
   [['?'],'קיצורי המקלדת (הרשימה הזו)'],
   [['/'],'קפיצה לחיפוש בחור'],
   [['Ctrl','Z'],'ביטול הפעולה האחרונה — עד 60 צעדים אחורה'],
-  [['Ctrl','S'],'שמירת המצב הנוכחי כסימולציה'],
+  [['Ctrl','S'],'שמירת המצב הנוכחי כגרסה'],
   [['1'],'מעבר למדור המבנה'],
   [['2'],'מעבר לרשימת הבחורים'],
   [['3'],'מעבר לכללים'],
@@ -6834,11 +6844,11 @@ const HELP=[
     {ol:['משבצים גרסה אחת ולוחצים <b>📌 שמירת המצב הנוכחי</b> עם שם.',
          'משנים ומשבצים אחרת, ושומרים גם אותה.',
          'כל גרסה מציגה כמה הפרות יש בה — עוברים ביניהן בלחיצה ומשווים.']},
-    {tip:'<kbd>Ctrl</kbd>+<kbd>S</kbd> שומר סימולציה מכל מקום בתוכנה.'}
+    {tip:'<kbd>Ctrl</kbd>+<kbd>S</kbd> שומר גרסה מכל מקום בתוכנה.'}
    ]},
   {id:'notes',ico:'📝',t:'הערות',lead:'לזכור דברים במקום שבו הם רלוונטיים.',
    body:[
-    {p:'כמעט לכל דבר בתוכנה אפשר לצרף הערה: לפרויקט, לאגף, לחדר, לבחור, לכלל, לקבוצה ולסימולציה. מחפשים את הכפתור 🗒️ ליד הפריט.'},
+    {p:'כמעט לכל דבר בתוכנה אפשר לצרף הערה: לפרויקט, לאגף, לחדר, לבחור, לכלל, לקבוצה ולגרסה. מחפשים את הכפתור 🗒️ ליד הפריט.'},
     {p:'הערה קיימת מסומנת ב־📝 ומוצגת במקום שבו הפריט מופיע — למשל "מיטה שבורה ליד החלון" על חדר מסוים.'}
    ]},
   {id:'data',ico:'💾',t:'ייבוא, גיבוי והדפסה',lead:'איך הנתונים נכנסים ויוצאים.',
@@ -6866,13 +6876,13 @@ const HELP=[
     {p:'היועץ רואה את הלוח בזמן אמת, עונה על שאלות, ויכול גם לבצע פעולות בעצמו.'},
     {h:'שלוש רמות הרשאה'},
     {ul:['<b>ייעוץ בלבד</b> — מדבר, לא נוגע.',
-         '<b>פעולות רגילות</b> — משבץ, נועל, מוסיף כללים ושומר סימולציות.',
+         '<b>פעולות רגילות</b> — משבץ, נועל, מוסיף כללים ושומר גרסאות.',
          '<b>ללא הגבלה</b> — גם מוחק ומאפס. מומלץ להשאיר את האישור המקדים דלוק.']},
     {p:'המפתח מתקבל חינם ב־aistudio.google.com/apikey, נשמר רק בדפדפן, ואינו נכלל בגיבויים.'}
    ]},
   {id:'find',ico:'🔍',t:'חיפוש בכל התוכנה',lead:'תיבה אחת שמוצאת הכול — Ctrl+K.',
    body:[
-    {p:'לוחצים <kbd>Ctrl</kbd>+<kbd>K</kbd> (או 🔍 בסרגל) ומקלידים. החיפוש עובר על בחורים, חדרים, אגפים, בניינים, כללים, קבוצות, סימולציות ואפילו על ההערות שכתבתם.'},
+    {p:'לוחצים <kbd>Ctrl</kbd>+<kbd>K</kbd> (או 🔍 בסרגל) ומקלידים. החיפוש עובר על בחורים, חדרים, אגפים, בניינים, כללים, קבוצות, גרסאות ואפילו על ההערות שכתבתם.'},
     {ul:['תוצאה של בחור פותחת אותו ישר במגירת השיבוץ.',
          'תוצאה של חדר קופצת לאגף שלו ומדגישה אותו.',
          'תוצאה של הערה לוקחת אתכם למקום שאליו היא שייכת.']},
@@ -6890,7 +6900,7 @@ const HELP=[
    ]},
   {id:'trash',ico:'♻️',t:'סל המיחזור',lead:'מחיקה כבר לא סופית.',
    body:[
-    {p:'כל מחיקה — בחור, חדר, אגף, בניין, כלל, קבוצה, סימולציה או תבנית — נכנסת לסל במקום להיעלם.'},
+    {p:'כל מחיקה — בחור, חדר, אגף, בניין, כלל, קבוצה, גרסה או תבנית — נכנסת לסל במקום להיעלם.'},
     {p:'השחזור מחזיר גם את מה שהיה בפנים: אגף חוזר עם החדרים שלו, עם הבחורים שישבו בהם ועם ההערות.'},
     {ul:['פותחים מ־🗄️ נתונים ← ♻️ סל המיחזור, או מהחיפוש.',
          'הסל שומר את 60 הפריטים האחרונים.',
@@ -10676,8 +10686,8 @@ const DESTRUCTIVE=new Set(['deleteRule','deleteAllRules','deleteSim','clear','cl
                            'removeBoy','removeRoom','removeWing']);
 const LEVEL_NOTE={
   advise:'היועץ ייעץ וימליץ בלבד — הוא לא נוגע בלוח. כל שינוי תבצעו בעצמכם.',
-  act:'היועץ יכול לשבץ, לנעול, להוסיף כללים ולשמור סימולציות. אינו מוחק ואינו מאפס.',
-  full:'היועץ יכול גם למחוק כללים וסימולציות, לנקות הכול ולאפס את התוכנה. מומלץ להשאיר את האישור המקדים דלוק.'
+  act:'היועץ יכול לשבץ, לנעול, להוסיף כללים ולשמור גרסאות. אינו מוחק ואינו מאפס.',
+  full:'היועץ יכול גם למחוק כללים וגרסאות, לנקות הכול ולאפס את התוכנה. מומלץ להשאיר את האישור המקדים דלוק.'
 };
 const LEVEL_SHORT={advise:'ייעוץ בלבד',act:'פעולות רגילות',full:'ללא הגבלה'};
 /* One line per action, keyed by the SAME strings runActions dispatches on.
@@ -10793,13 +10803,13 @@ function stateBrief(){
     lines.push('כללים:');
     ev.list.forEach((it,i)=>lines.push(`${i+1}. ${ruleText(it.rule)} [${it.rule.level==='hard'?'בלתי מתפשר':'עדיף'}] — ${it.st==='violated'?'מופר!':it.st==='ok'?'מתקיים':it.st==='off'?'כבוי':'ממתין'}`));
   }else lines.push('כללים: אין');
-  lines.push('סימולציות שמורות: '+(S.sims.map(s=>s.name).join(', ')||'אין'));
+  lines.push('גרסאות שמורות: '+(S.sims.map(s=>s.name).join(', ')||'אין'));
   const nkeys=Object.keys(S.notes);
   if(nkeys.length){
     lines.push('הערות:');
     for(const k of nkeys.slice(0,40)){
       const i=k.indexOf(':');
-      const kind=i<0?'פרויקט':{boy:'בחור',room:'חדר',wing:'אגף',rule:'כלל',group:'קבוצה',sim:'סימולציה'}[k.slice(0,i)]||k.slice(0,i);
+      const kind=i<0?'פרויקט':{boy:'בחור',room:'חדר',wing:'אגף',rule:'כלל',group:'קבוצה',sim:'גרסה'}[k.slice(0,i)]||k.slice(0,i);
       const id=i<0?'':' '+k.slice(i+1);
       lines.push(`- ${kind}${id}: ${S.notes[k]}`);
     }
@@ -10825,9 +10835,9 @@ function actionLabel(a){
     addRule:'הוספת כלל',editRule:`עריכת כלל מספר ${a.index}`,
     toggleRule:`${a.on===false?'כיבוי':'הפעלת'} כלל מספר ${a.index}`,
     deleteRule:`מחיקת כלל מספר ${a.index}`,deleteAllRules:'מחיקת כל הכללים',
-    saveSim:`שמירת הסימולציה "${a.name||''}"`,loadSim:`טעינת הסימולציה "${a.name||''}"`,
-    renameSim:`שינוי שם הסימולציה "${a.name}" ל"${a.newName}"`,
-    deleteSim:`מחיקת הסימולציה "${a.name}"`,
+    saveSim:`שמירת הגרסה "${a.name||''}"`,loadSim:`טעינת הגרסה "${a.name||''}"`,
+    renameSim:`שינוי שם הגרסה "${a.name}" ל"${a.newName}"`,
+    deleteSim:`מחיקת הגרסה "${a.name}"`,
     renameBoy:`שינוי שם: "${a.boy}" ← "${a.newName}"`,
     addBoy:`הוספת הבחור "${a.name}"`,removeBoy:`הסרת הבחור "${a.boy}" מהרשימה`,
     addRoom:`הוספת חדר ${a.room}`,editRoom:`עריכת חדר ${a.room}`,
@@ -10846,7 +10856,7 @@ function actionLabel(a){
   }[a.type]||a.type;
 }
 function ACT_HE_NOTE(kind){
-  return {boy:'הבחור',room:'חדר',wing:'האגף',rule:'כלל',group:'הקבוצה',sim:'הסימולציה',project:'הפרויקט'}[kind]||kind;
+  return {boy:'הבחור',room:'חדר',wing:'האגף',rule:'כלל',group:'הקבוצה',sim:'הגרסה',project:'הפרויקט'}[kind]||kind;
 }
 function runActions(acts){
   const done=[],fail=[],blocked=[],declined=[];
@@ -10935,18 +10945,18 @@ function runActions(acts){
       else if(a.type==='unlock'){snapshot();S.locks=S.locks.filter(x=>x!==a.boy);save();render();done.push(`🔓 ${a.boy}`);}
       else if(a.type==='saveSim'){
         /* every other sim action resolves by name, so two sims may not share one */
-        let nm=String(a.name||'').trim()||`סימולציה ${S.sims.length+1}`;
+        let nm=String(a.name||'').trim()||`גרסה ${S.sims.length+1}`;
         if(S.sims.some(s=>s.name===nm)){
           let k=2; while(S.sims.some(s=>s.name===nm+' '+k))k++;
           nm=nm+' '+k;
         }
         snapshot();
         const sim={id:uid(),name:nm,ts:Date.now(),assign:{...S.assign}};
-        S.sims.push(sim);S.activeSim=sim.id;save();render();done.push(`נשמרה סימולציה "${sim.name}"`);
+        S.sims.push(sim);S.activeSim=sim.id;save();render();done.push(`נשמרה גרסה "${sim.name}"`);
       }
       else if(a.type==='loadSim'){
         const sim=S.sims.find(s=>s.name===a.name);
-        if(!sim)throw new Error('אין סימולציה בשם '+a.name);
+        if(!sim)throw new Error('אין גרסה בשם '+a.name);
         loadSim(sim);done.push(`נטענה "${sim.name}"`);
       }
       else if(a.type==='deleteRule'){
@@ -10964,11 +10974,11 @@ function runActions(acts){
       }
       else if(a.type==='deleteSim'){
         const sim=S.sims.find(s=>s.name===a.name);
-        if(!sim)throw new Error('אין סימולציה בשם '+a.name);
+        if(!sim)throw new Error('אין גרסה בשם '+a.name);
         snapshot();
         S.sims=S.sims.filter(s=>s.id!==sim.id);
         if(S.activeSim===sim.id)S.activeSim=null;
-        save();render();done.push(`נמחקה הסימולציה "${sim.name}"`);
+        save();render();done.push(`נמחקה הגרסה "${sim.name}"`);
       }
       else if(a.type==='clearAll'){
         snapshot();
@@ -11033,13 +11043,13 @@ function runActions(acts){
       /* ---------- simulations ---------- */
       else if(a.type==='renameSim'){
         const sim=S.sims.find(s=>s.name===a.name);
-        if(!sim)throw new Error('אין סימולציה בשם '+a.name);
+        if(!sim)throw new Error('אין גרסה בשם '+a.name);
         const nn=String(a.newName||'').trim();
         if(!nn)throw new Error('חסר שם חדש');
-        if(S.sims.some(s=>s.id!==sim.id&&s.name===nn))throw new Error('כבר יש סימולציה בשם '+nn);
+        if(S.sims.some(s=>s.id!==sim.id&&s.name===nn))throw new Error('כבר יש גרסה בשם '+nn);
         snapshot();
         sim.name=nn;save();render();
-        done.push(`הסימולציה שונתה ל"${sim.name}"`);
+        done.push(`הגרסה שונתה ל"${sim.name}"`);
       }
       /* ---------- boys ---------- */
       else if(a.type==='renameBoy'){
@@ -11224,7 +11234,7 @@ function runActions(acts){
           id=g.id;
         }else if(kind==='sim'){
           const s2=S.sims.find(x=>x.name===a.id||x.id===a.id);
-          if(!s2)throw new Error('אין סימולציה בשם '+a.id);
+          if(!s2)throw new Error('אין גרסה בשם '+a.id);
           id=s2.id;
         }else throw new Error('יעד הערה לא מוכר: '+kind);
         snapshot();
@@ -11425,7 +11435,7 @@ function applyAiIdentity(){
 }
 function greet(){
   const c=aiCfg();
-  addMsg('model',`שלום, אני ${c.name}. אני רואה את הלוח, הכללים והסימולציות בזמן אמת.`);
+  addMsg('model',`שלום, אני ${c.name}. אני רואה את הלוח, הכללים והגרסאות בזמן אמת.`);
   if(!localStorage.getItem(GKEY)){
     const w=addMsg('sys','כדי שאוכל לענות צריך מפתח API חינמי של Google Gemini.');
     const b=document.createElement('button');
@@ -11621,7 +11631,7 @@ function paintAiLevel(){
   const groups=[
     ['שיבוץ',['move','auto','clear','lock','unlock']],
     ['כללים',['addRule','editRule','toggleRule','deleteRule','deleteAllRules']],
-    ['סימולציות',['saveSim','loadSim','renameSim','deleteSim']],
+    ['גרסאות',['saveSim','loadSim','renameSim','deleteSim']],
     ['רשימות',['renameBoy','addBoy','removeBoy','addRoom','editRoom','removeRoom','addWing','renameWing','removeWing']],
     ['עצמו',['identity','setLevel']],
     ['תוכנה',['setZman','display','setting','clearAll','reset']]
@@ -11819,7 +11829,7 @@ function renderSetStats(){
     ['משובצים',`${placed}/${S.boys.length}`,placed===S.boys.length?'okv':''],
     ['נעולים',S.locks.filter(b=>S.assign[b]).length,''],
     ['כללים',S.rules.length,''],
-    ['סימולציות',S.sims.length,''],
+    ['גרסאות',S.sims.length,''],
     ['הפרות',ev.hard+ev.soft,(ev.hard+ev.soft)?'warnv':'okv']
   ];
   /* built as nodes, not markup: the advisor's name, its emoji and the model id all
@@ -11941,17 +11951,17 @@ $('#rstRules').addEventListener('click',()=>{
   toast('הכללים נמחקו');
 });
 $('#rstSims').addEventListener('click',()=>{
-  if(!S.sims.length){toast('אין סימולציות למחוק');return;}
-  if(!askConfirm(`למחוק את כל ${S.sims.length} הסימולציות השמורות?`))return;
+  if(!S.sims.length){toast('אין גרסאות למחוק');return;}
+  if(!askConfirm(`למחוק את כל ${S.sims.length} הגרסאות השמורות?`))return;
   snapshot();
   S.sims=[];S.activeSim=null;save();render();renderSetStats();
-  toast('הסימולציות נמחקו — ↩️ ביטול מחזיר');
+  toast('הגרסאות נמחקו — ↩️ ביטול מחזיר');
 });
 /* the same full reset, reachable from the Data center — the place people actually
    look for "clear everything", instead of the bottom of the settings dialog */
 $('#dtReset').addEventListener('click',()=>$('#rstAll').click());
 $('#rstAll').addEventListener('click',()=>{
-  if(!confirm(`איפוס הפרויקט "${S.zman}"!\n\nיימחקו: רשימת הבחורים, הבניינים, האגפים והחדרים, השיבוץ, הנעילות, הכללים, הקבוצות והסימולציות של הפרויקט הזה — וגם מפתח היועץ.\nפרויקטים אחרים לא ייפגעו.\n\nלהמשיך?`))return;
+  if(!confirm(`איפוס הפרויקט "${S.zman}"!\n\nיימחקו: רשימת הבחורים, הבניינים, האגפים והחדרים, השיבוץ, הנעילות, הכללים, הקבוצות והגרסאות של הפרויקט הזה — וגם מפתח היועץ.\nפרויקטים אחרים לא ייפגעו.\n\nלהמשיך?`))return;
   if(!confirm('אישור אחרון — הפעולה אינה הפיכה.\nאם לא שמרתם גיבוי, בטלו עכשיו ושמרו קודם.\n\nלאפס?'))return;
   localStorage.removeItem(GKEY);
   localStorage.removeItem(GMODEL);
