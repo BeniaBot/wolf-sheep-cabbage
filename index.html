@@ -1519,9 +1519,10 @@ body.nopulse .pb-room.warn-hard{animation:none}
 
 .canvas{
   --cell:24px;
-  /* laid out left-to-right so the scroll origin and the stored x match up —
-     the labels inside the bars get their RTL back */
-  direction:ltr;user-select:none;-webkit-user-select:none;
+  /* the drawing inside is mirrored (right to left, like the sheet), so the scroll
+     starts at the right too — on a narrow screen it opened on an empty left side.
+     Children are placed by explicit left/top, which direction does not touch. */
+  direction:rtl;user-select:none;-webkit-user-select:none;
   border:1px solid var(--line2);border-radius:16px;background:var(--sunk);
   overflow:auto;overscroll-behavior:contain;padding:10px;
 }
@@ -3371,9 +3372,9 @@ function clearSearches(){
    project is swapped — a restored backup, a reset — none of it may survive: ticked
    names came back ticked with the bulk bar armed, and the rule form stayed in
    edit mode on a rule that no longer existed. */
-function afterStateReplaced(){
+function afterStateReplaced(keepChat){
   clearSel();formMembers.clear();editingRule=null;paintRuleForm();
-  clearSearches();resetSessionState();
+  clearSearches();resetSessionState(keepChat);
   STR={bld:null,canvas:false};EDB=null;EDW=null;ED=null;
 }
 /* typing must not pay for a full repaint per character — the redraw trails the
@@ -3454,7 +3455,8 @@ function migrate(s){
     id:String(w.id),
     name:String(w.name==null?'':w.name).trim()||'אגף',
     building:w.building,floor:w.floor,geom:w.geom,
-    plan:w.plan,layout:w.layout      /* layout = the pre-grid legacy shape */
+    plan:w.plan,layout:w.layout,     /* layout = the pre-grid legacy shape */
+    ...(w.drawn?{drawn:true}:{})     /* arranged by hand in the wing editor */
   }));
   if(!s.wings.length)s.wings=[{id:'w1',name:'אגף ראשי'}];
   /* a room pointing at a wing that no longer exists would never be drawn anywhere —
@@ -3545,7 +3547,7 @@ function migrate(s){
   }
   s.wings.forEach(w=>{
     w.plan=normPlan(Array.isArray(w.plan)?w.plan:(w.layout?sidesToPlan(w.layout):null),
-                    s.rooms.filter(r=>r.wing===w.id),s.mode==='basic');
+                    s.rooms.filter(r=>r.wing===w.id),s.mode==='basic'&&!w.drawn);
     delete w.layout;
   });
 
@@ -3727,13 +3729,13 @@ function readProject(id){
    travel with the project. Left behind, a tick list made in one project arrived in the
    next with the destructive bulk bar armed over names the user never picked there, and
    the advisor kept answering about a project that was no longer open. */
-function resetSessionState(){
+function resetSessionState(keepChat){
   if(typeof PICK!=='undefined')PICK.clear();
   if(typeof GSEL!=='undefined')GSEL=null;
   if(typeof railGroup!=='undefined')railGroup=null;
   if(typeof RSEL!=='undefined')RSEL=null;
   if(typeof NOTE_ED!=='undefined')NOTE_ED=null;
-  if(typeof AIH!=='undefined'){
+  if(typeof AIH!=='undefined'&&!keepChat){
     AIH.length=0;
     const m=$('#aiMsgs'); if(m)m.innerHTML='';
   }
@@ -4329,7 +4331,9 @@ function syncLayouts(){
     byWing.get(r.wing).push(r);
   }
   for(const w of S.wings){
-    w.plan=normPlan(w.plan,byWing.get(w.id));
+    /* a wing someone arranged by hand keeps its arrangement in list mode too —
+       only the list's own layout is rebuilt from the room order */
+    w.plan=normPlan(w.plan,byWing.get(w.id),!isPro()&&!w.drawn);
     /* a wing born outside the building canvas (the wing dialog, the AI, an import)
        arrives without a floor or a spot on the drawing — it would be invisible in
        the very screen the stepper sends people to. Adopt it in, without overlaps. */
@@ -5378,7 +5382,10 @@ function renderSims(){
   }
   S.sims.forEach((sim,idx)=>{
     const ev=evaluate(sim.assign);
-    const placed=S.boys.filter(b=>sim.assign[b]).length;
+    /* counted against TODAY's beds: a version saved before a room lost a bed showed
+       4/4 and "✓ נקי", and loading it then put a boy out without a word */
+    const over=simOverflow(sim);
+    const placed=S.boys.filter(b=>sim.assign[b]).length-over.length;
     const card=document.createElement('div');
     card.className='sim'+(S.activeSim===sim.id?' active':'');
     card.style.setProperty('--rot',(((idx*7)%5)-2)*0.7+'deg');
@@ -5400,8 +5407,10 @@ function renderSims(){
     let vh='';
     if(ev.hard>0) vh+=`<b class="h">⛔${ev.hard}</b> `;
     if(ev.soft>0) vh+=`<b class="s">⚠️${ev.soft}</b> `;
-    if(ev.hard===0&&ev.soft===0) vh+=`<b class="g">✓ נקי</b> `;
+    if(over.length) vh+=`<b class="s">🛏️ ${over.length===1?'אחד לא נכנס':over.length+' לא נכנסים'}</b> `;
+    else if(ev.hard===0&&ev.soft===0) vh+=`<b class="g">✓ נקי</b> `;
     st.innerHTML=`${placed}/${S.boys.length} משובצים · ${vh}`;
+    if(over.length)st.title=`יש היום פחות מיטות מכשנשמרה הגרסה: ${over.join(', ')} ${over.length===1?'יחכה':'יחכו'} בממתינים אם תטענו אותה`;
 
     const snl=noteLine('sim',sim.id);
     if(snl){snl.style.marginTop='2px';card.appendChild(snl);}
@@ -5439,15 +5448,34 @@ function renderSims(){
     bar.appendChild(card);
   });
 }
+/* who a saved version cannot seat today, because a room has fewer beds than when it
+   was saved. The version's own locked boys keep their places first. */
+function simOverflow(sim){
+  const locked=new Set(Array.isArray(sim.locks)?sim.locks:S.locks);
+  const by=new Map();
+  for(const b of S.boys){
+    const r=sim.assign[b];
+    if(r&&roomBy(r)){if(!by.has(r))by.set(r,[]);by.get(r).push(b);}
+  }
+  const out=[];
+  for(const [num,occ] of by)
+    out.push(...[...occ.filter(b=>locked.has(b)),...occ.filter(b=>!locked.has(b))].slice(roomBy(num).beds));
+  return out;
+}
 function loadSim(sim){
   snapshot();
+  const over=new Set(simOverflow(sim));
   const asg={};
   for(const[b,rm]of Object.entries(sim.assign))
-    if(S.boys.includes(b)&&roomBy(rm)) asg[b]=rm;
+    if(S.boys.includes(b)&&roomBy(rm)&&!over.has(b)) asg[b]=rm;
   S.assign=asg; S.activeSim=sim.id; selected=null;
   /* a version remembers its own 🔒 — older ones without that keep today's locks */
   S.locks=(Array.isArray(sim.locks)?sim.locks:S.locks).filter(b=>asg[b]);
-  save();render();toast(`נטענה: "${sim.name}"`);
+  save();render();
+  const out=[...over];
+  toast(`נטענה: "${sim.name}"`+(out.length
+    ?`\n${out.join(', ')} ${out.length===1?'לא נכנס':'לא נכנסו'} — יש היום פחות מיטות מכשנשמרה, ${out.length===1?'והוא ממתין':'והם ממתינים'}`:''),
+    {label:'↩️ להחזיר',fn:undo});
 }
 
 /* ---------- rule form ---------- */
@@ -6310,7 +6338,7 @@ $('#btnEditApply').addEventListener('click',()=>{
     return {id:w.id,name:w.name.trim()||'אגף',
             building:(old&&old.building)||S.buildings[0].id,
             floor:old?old.floor:undefined,geom:old?old.geom:undefined,
-            plan:old?old.plan:[]};
+            plan:old?old.plan:[],...(old&&old.drawn?{drawn:true}:{})};
   });
   S.rooms=ED.rooms.map(r=>({num:r.num,beds:r.beds,wing:r.wing}));
   const remapAsg=old=>{
@@ -6327,7 +6355,10 @@ $('#btnEditApply').addEventListener('click',()=>{
   };
   S.assign=remapAsg(S.assign);
   S.locks=[...new Set(S.locks.map(mapB))].filter(b=>S.assign[b]);
-  S.sims.forEach(s=>s.assign=remapAsg(s.assign));
+  S.sims.forEach(s=>{
+    s.assign=remapAsg(s.assign);
+    if(Array.isArray(s.locks))s.locks=[...new Set(s.locks.map(mapB))].filter(b=>s.assign[b]);
+  });
   /* groups follow the same renames and deletions as everything else */
   S.groups.forEach(g=>{g.members=[...new Set(g.members.map(mapB))].filter(b=>S.boys.includes(b));});
   S.rules=S.rules.map(r=>{
@@ -6465,7 +6496,12 @@ function findRows(q){
     add('⚖️','מעבר','שלב 3 · כללים','מה מותר ומה אסור',()=>setTab('rules'));
     add('🛏️','מעבר','שלב 4 · שיבוץ','הלוח עצמו',()=>setTab('board'));
     add('🗂️','מעבר','שלב 5 · השוואה','גרסאות שמורות',()=>setTab('sims'));
-    add('🤖','פקודה','שיבוץ אוטומטי','מילוי כל החדרים לפי הכללים',()=>$('#btnAuto').click());
+    /* a click on a disabled button does nothing at all — say why instead */
+    add('🤖','פקודה','שיבוץ אוטומטי','מילוי כל החדרים לפי הכללים',()=>{
+      const b=$('#btnAuto');
+      if(b.disabled){toast(b.title||'אין עדיין את מי לשבץ');return;}
+      b.click();
+    });
     add('🖨️','פקודה','הדפסת השיבוץ','דף נקי לתלייה',printAssignment);
     add('📊','פקודה','ייצוא לאקסל','טבלת שיבוץ מלאה',()=>$('#btnXlsx').click());
     add('💾','פקודה','שמירת גיבוי','קובץ לשחזור מלא',()=>$('#btnExport').click());
@@ -7082,7 +7118,8 @@ function roomsInOrder(w){
           ...roomsOf(w.id).filter(r=>!seen.has(r.num))];
 }
 /* "אגף 200 · קומה ב׳" — the floor is named only where there is more than one */
-const wingLabel=(w,b,f)=>w.name+(isPro()&&f&&b&&b.floors.length>1?' · '+f.name:'');
+const wingLabel=(w,b,f)=>w.name+(isPro()&&f&&b&&b.floors.length>1&&!w.name.includes(f.name)
+  &&!(floorLetter(w.name)>=0&&floorLetter(w.name)===floorLetter(f.name))?' · '+f.name:'');
 function printFloorSheet(bid,fid){
   const b=bldBy(bid),fl=b&&b.floors.find(f=>f.id===fid);
   const ws=floorWingsOrdered(bid,fid).filter(w=>roomsOf(w.id).length);
@@ -7283,7 +7320,10 @@ function renameBoyEverywhere(old,nn){
   moveNote('boy',old,nn);
   if(S.assign[old]){S.assign[nn]=S.assign[old];delete S.assign[old];}
   S.locks=S.locks.map(b=>b===old?nn:b);
-  S.sims.forEach(s=>{if(s.assign[old]){s.assign[nn]=s.assign[old];delete s.assign[old];}});
+  S.sims.forEach(s=>{
+    if(s.assign[old]){s.assign[nn]=s.assign[old];delete s.assign[old];}
+    if(Array.isArray(s.locks))s.locks=s.locks.map(b=>b===old?nn:b);   /* its 🔒 goes with him */
+  });
   S.rules.forEach(r=>{
     if(r.members)r.members=r.members.map(b=>b===old?nn:b);
     if(r.a===old)r.a=nn;
@@ -7907,6 +7947,11 @@ function nextFloorName(b){
   const used=new Set(b.floors.map(f=>f.name));
   const taken=new Set(b.floors.map(f=>floorLetter(f.name)).filter(i=>i>=0));
   /* the letter after the highest one in use: after "קומה ב" comes ג׳, not א׳ */
+  /* a building numbered the old way ("קומה", "קומה 2") goes on with numbers */
+  if(!taken.size){
+    const nums=b.floors.map(f=>{const m=String(f.name).match(/^קומה(?:\s+(\d+))?$/);return m?(+m[1]||1):0;});
+    if(nums.some(Boolean)){let k=Math.max(...nums)+1;while(used.has('קומה '+k))k++;return 'קומה '+k;}
+  }
   const top=Math.max(-1,...taken);
   for(let i=top+1;i<HEB_ORD.length;i++){const nm='קומה '+HEB_ORD[i];if(!taken.has(i)&&!used.has(nm))return nm;}
   for(let i=0;i<HEB_ORD.length;i++){const nm='קומה '+HEB_ORD[i];if(!taken.has(i)&&!used.has(nm))return nm;}
@@ -7934,6 +7979,7 @@ function renameFloor(b,f){
 }
 function deleteFloor(b,f){
   if(!f||b.floors.length<2)return;
+  dropBldAnchor();
   const ws=floorWings(b.id,f.id),real=ws.filter(w=>!isGhostWing(w));
   const rooms=S.rooms.filter(r=>ws.some(w=>w.id===r.wing));
   const boys=rooms.reduce((a,r)=>a+occupants(r.num).length,0);
@@ -7958,12 +8004,22 @@ function deleteFloor(b,f){
    One click: a new floor with the same wings, rooms, beds and shapes, every room
    number moved up by a hundred (or two, if the next hundred is taken). */
 function copyFloor(b,src){
+  dropBldAnchor();                 /* a corner parked on the old floor must not close here */
+  const srcName=src.name;          /* nextFloorName may rename a lone legacy "קומה" */
   const ws=floorWingsOrdered(b.id,src.id).filter(w=>!isGhostWing(w));
   const rooms=S.rooms.filter(r=>ws.some(w=>w.id===r.wing));
   if(!rooms.length)return;
+  /* 201 → 301. A number of one or two digits is a count within the floor, not a
+     floor number ("ב-1"): there the floor letter in front moves on instead */
+  const LET='אבגדהוזחטיכלמנסעפצקרשת';
   const shift=(num,off)=>{
     const m=String(num).match(/^(.*?)(\d+)(\D*)$/);
-    return m?m[1]+String(+m[2]+off).padStart(m[2].length,'0')+m[3]:null;
+    if(!m)return null;
+    if(m[2].length>=3)return m[1]+String(+m[2]+off).padStart(m[2].length,'0')+m[3];
+    const lm=m[1].match(/^(.*?)([א-ת])([-־\s]*)$/);
+    const i=lm?LET.indexOf(lm[2]):-1;
+    if(i<0||i+off/100>=LET.length)return null;
+    return lm[1]+LET[i+off/100]+lm[3]+m[2]+m[3];
   };
   let off=0;
   for(let k=1;k<=50&&!off;k++)
@@ -7975,7 +8031,7 @@ function copyFloor(b,src){
   const wname=w=>{
     let nm;
     /* a wing named after its floor is named after the new floor */
-    if(w.name===src.name||(floorLetter(w.name)>=0&&floorLetter(w.name)===floorLetter(src.name)))nm=f.name;
+    if(w.name===srcName||w.name===src.name||(floorLetter(w.name)>=0&&floorLetter(w.name)===floorLetter(srcName)))nm=f.name;
     else{
       const m=w.name.match(/^(.*?)(\d{3,})(\D*)$/);      /* "אגף 200" → "אגף 300" */
       nm=m?m[1]+(+m[2]+off)+m[3]:w.name+' · '+f.name;
@@ -7988,7 +8044,7 @@ function copyFloor(b,src){
   for(const w of ws){
     const nw={id:'w'+uid(),name:wname(w),building:b.id,floor:f.id,
       plan:(w.plan||[]).map(c=>c.t==='room'?{...c,num:shift(c.num,off)}:{...c}),
-      geom:w.geom?JSON.parse(JSON.stringify(w.geom)):null};
+      geom:w.geom?JSON.parse(JSON.stringify(w.geom)):null,...(w.drawn?{drawn:true}:{})};
     S.wings.push(nw);
     for(const r of roomsOf(w.id)){
       const num=shift(r.num,off);
@@ -7998,7 +8054,7 @@ function copyFloor(b,src){
   EDB.floor=f.id;EDB.sel=null;
   save();bldPaint();render();
   made.sort((p,q)=>p.localeCompare(q,'he',{numeric:true}));
-  toast(`נוצרה "${f.name}" — זהה ל"${src.name}": ${cnt(made.length,'חדרים')}, ${made[0]} עד ${made[made.length-1]}.\n`
+  toast(`נוצרה "${f.name}" — זהה ל"${srcName}": ${cnt(made.length,'חדרים')}, ${made[0]} עד ${made[made.length-1]}.\n`
     +'אפשר לשנות בה כל אגף ב"✏️ עריכת האגף".',{label:'↩️ להחזיר',fn:undo});
 }
 /* a floor whose wings were drawn by hand on the free canvas (an L, two corridors)
@@ -8010,6 +8066,7 @@ function reorderFloorWing(b,fid,id,dir){
   const i=order.indexOf(id),j=i+dir;
   if(i<0||j<0||j>=order.length)return;
   [order[i],order[j]]=[order[j],order[i]];
+  dropBldAnchor();
   snapshot();
   layoutFloorSequence(b.id,fid,order);
   save();bldPaint();render();
@@ -8075,13 +8132,13 @@ function renderFloorSeq(b){
     :'האגפים ממשיכים זה את זה לאורך המסדרון, מימין לשמאל. "ימינה" ו"שמאלה" מזיזים אגף.'));
   /* the free canvas is for a floor built differently — nothing to decide before
      there is a wing on it */
-  if(ws.length){
+  if(ws.length||STR.canvas){
     const tg=el('button','btn mini',
       STR.canvas?'🖌️ סגירת הציור החופשי':'🖌️ ציור חופשי של הקומה — לבניין שבנוי אחרת');
     tg.style.margin='4px 0 10px';
     tg.addEventListener('click',()=>{dropBldAnchor();STR.canvas=!STR.canvas;bldPaint();});
     host.appendChild(tg);
-  }else STR.canvas=false;
+  }
 }
 /* =====================================================================
    ==================  basic mode: a flat list of wings  ===============
@@ -8545,6 +8602,10 @@ function barEl(w,edit){
   const wingAt=(b,c)=>floorWings(b.id,EDB.floor).find(w=>w.geom&&geomSet(w.geom).has(c.x+','+c.y))||null;
   grid.addEventListener('pointerdown',e=>{
     if(!EDB||!EDB.id||e.button!==0)return;
+    /* a name being typed for the selected wing is kept BEFORE the selection moves:
+       this press is prevented below, so the box would otherwise never lose focus,
+       and the repaint would write the next wing's name over what was typed */
+    if(document.activeElement===$('#bldBarName'))$('#bldBarName').blur();
     const b=bldBy(EDB.id); if(!b)return;
     const c=cellAt(e);
     const hit=wingAt(b,c);
@@ -8698,6 +8759,9 @@ function barEl(w,edit){
 $('#bldBarName').addEventListener('focus',()=>{
   const w=EDB&&EDB.sel?wingBy(EDB.sel):null;
   $('#bldBarName').dataset.was=w?w.name:'';
+  /* the name belongs to the wing that was selected when typing began — a click on
+     another wing changes the selection before this box loses focus */
+  $('#bldBarName').dataset.wid=w?w.id:'';
 });
 $('#bldBarName').addEventListener('input',()=>{
   const w=EDB&&EDB.sel?wingBy(EDB.sel):null; if(!w)return;
@@ -8706,7 +8770,7 @@ $('#bldBarName').addEventListener('input',()=>{
   if(node)node.textContent=$('#bldBarName').value.slice(0,40)||w.name;
 });
 $('#bldBarName').addEventListener('blur',()=>{
-  const w=EDB&&EDB.sel?wingBy(EDB.sel):null; if(!w)return;
+  const w=wingBy($('#bldBarName').dataset.wid||'')||(EDB&&EDB.sel?wingBy(EDB.sel):null); if(!w)return;
   const nn=($('#bldBarName').value.trim()||w.name).slice(0,40);
   $('#bldBarName').value=nn;
   if(nn!==w.name){snapshot();w.name=nn;save();}
@@ -8821,7 +8885,7 @@ function openWing(id,bldId,floorId){
      decisions before anything appears — and "🧱 בניית הפריסה" can never again answer
      "בחרו קודם תבנית" to someone who just typed how many rooms he has. */
   const fresh=!w||isGhostWing(w);
-  EDW={id:id||null,building:b0.id,floor:fl0,tpl:fresh&&isPro()?DEFAULT_TPL:null,built:null};
+  EDW={id:id||null,building:b0.id,floor:fl0,tpl:fresh&&isPro()?DEFAULT_TPL:null,built:null,fresh};
   /* one value for both the field and the draft. It used to be read from #wgBeds
      BEFORE the line below overwrote that field, and nothing resets the field on
      close — so a hand-drawn room got a bed count contradicting the one on screen. */
@@ -8829,6 +8893,7 @@ function openWing(id,bldId,floorId){
   WLAY={root:$('#wgLayEd'),cells,sel:null,numbered:true,tool:cells.length?'move':'hall',defBeds};
   LAY=WLAY;
   $('#wgName').value=fresh?suggestWingName(b0.id,fl0):w.name;
+  EDW.sugName=fresh?$('#wgName').value:null;
   const sel=$('#wgBld'); sel.innerHTML='';
   for(const b of S.buildings){
     const o=document.createElement('option');
@@ -8899,7 +8964,7 @@ function wingTitle(){
   const w=EDW&&EDW.id?wingBy(EDW.id):null;
   const b=bldBy(EDW.building);
   const f=b&&b.floors.length>1&&isPro()?b.floors.find(x=>x.id===EDW.floor):null;
-  $('#wgTtl').textContent='🏗️ '+(w?w.name:'אגף חדש')+(f?' · '+f.name:'');
+  $('#wgTtl').textContent='🏗️ '+(w&&!EDW.fresh?w.name:'אגף חדש')+(f?' · '+f.name:'');
 }
 function suggestStart(){
   let max=0;
@@ -8962,8 +9027,9 @@ function tplNote(){
   const kept=new Set(nums);
   const gone=layRooms().filter(c=>!kept.has(String(c.num)));
   let boys=0; for(const g of gone)boys+=stripOcc(g).length;
-  n.textContent=(have?`"🧱 בניית הפריסה" תבנה את האגף מחדש: ${range}.`:`ייבנו ${range}.`)
-    +(have?' מה שתיקנתם ביד למטה יוחלף — ואפשר יהיה להחזיר.':'')
+  const btn=pro?'🧱 בניית הפריסה':'🚪 בניית החדרים';
+  n.textContent=(have?`"${btn}" תבנה את האגף מחדש: ${range}.`:`ייבנו ${range}.`)
+    +(have&&pro&&!wingUntouched()?' מה שתיקנתם ביד למטה יוחלף — ואפשר יהיה להחזיר.':'')
     +(gone.length?` ${cnt(gone.length,'חדרים')} שלא ברשימה יוסרו`+(boys?` ו־${cnt(boys,'בחורים')} יחזרו לממתינים`:'')+'.':'');
 }
 ['#wgCount','#wgBeds','#wgStart'].forEach(s=>$(s).addEventListener('input',()=>{
@@ -9052,7 +9118,10 @@ function cellsToStrip(cells){
   a.sort((p,q)=>p.x-q.x); b.sort((p,q)=>p.x-q.x);
   /* a gap drawn along the corridor is real (a wall, a stairwell nobody marked) —
      the strip would silently close it up, so such a wing stays in the drawing */
-  const packed=arr=>{let x=1;for(const c of arr){if(c.x!==x)return false;x+=cellW(c);}return true;};
+  /* measured from where the corridor starts — in the mirrored drawing the first
+     column someone paints is x=0, and a fixed start of 1 refused every such wing */
+  const x0=Math.min(...halls.map(h=>h.x));
+  const packed=arr=>{let x=x0;for(const c of arr){if(c.x!==x)return false;x+=cellW(c);}return true;};
   if(!packed(a)||!packed(b))return null;
   const s={a:a.map(mk),b:b.map(mk)};
   return stripFits(s)?s:null;
@@ -9344,7 +9413,7 @@ const LE_MORE=['sink','stairs','elevator','madrich','study','kitchen','laundry',
 
 function renderLay(){
   if(!LAY)return;
-  if(LAY===WLAY)wingBtns();
+  if(LAY===WLAY){wingBtns();if(EDW)tplNote();}
   const root=LAY.root;
   let tools=root.querySelector('.le-tools');
   if(!tools){
@@ -9879,8 +9948,15 @@ function leaveWing(){
 $('#wgCancel').addEventListener('click',leaveWing);
 $('#wgX').addEventListener('click',leaveWing);
 $('#dlgWing').addEventListener('cancel',e=>{if(wingDirty()){e.preventDefault();leaveWing();}});
-$('#wgBld').addEventListener('change',()=>{EDW.building=$('#wgBld').value;fillWingFloors();});
-$('#wgFloor').addEventListener('change',()=>{EDW.floor=$('#wgFloor').value;wingTitle();});
+/* the suggested name belongs to the floor it was suggested for — moving to another
+   floor while it is still untouched moves the suggestion with it */
+function followSuggestion(){
+  if(!EDW||!EDW.sugName||$('#wgName').value.trim()!==EDW.sugName)return;
+  EDW.sugName=suggestWingName(EDW.building,EDW.floor);
+  $('#wgName').value=EDW.sugName;
+}
+$('#wgBld').addEventListener('change',()=>{EDW.building=$('#wgBld').value;fillWingFloors();followSuggestion();});
+$('#wgFloor').addEventListener('change',()=>{EDW.floor=$('#wgFloor').value;wingTitle();followSuggestion();});
 $('#wgName').addEventListener('input',()=>{});
 
 $('#wgSave').addEventListener('click',()=>{
@@ -9889,7 +9965,9 @@ $('#wgSave').addEventListener('click',()=>{
   /* The hint above the button promises "ייבנו 10 חדרים", but those fields only take
      effect when בניית החדרים is pressed. Saving straight away created a wing with no
      rooms at all — so build them here rather than quietly contradicting the hint. */
-  if(!layRooms().length&&$('#wgCount').value.trim()){
+  /* an existing wing that is empty on purpose saves as it is — in the drawing it
+     used to be refused until a shape was picked, with no word about the way out */
+  if(!layRooms().length&&$('#wgCount').value.trim()&&(EDW.fresh||!isPro())){
     const c=Math.max(0,Math.min(200,parseInt($('#wgCount').value,10)||0));
     if(c>0){
       if(isPro()&&!EDW.tpl){toast('באגף עוד אין חדרים — לוחצים על אחת הצורות למעלה, והאגף ייבנה');return;}
@@ -9957,7 +10035,9 @@ $('#wgSave').addEventListener('click',()=>{
     S.wings=S.wings.filter(x=>x.id===wid||!isGhostWing(x));
   }else if(w.building!==b3.id||w.floor!==fl){
     w.building=b3.id; w.floor=fl; delete w.geom;
-    toEnd=true; movedTo=b3.floors.find(f=>f.id===fl);
+    toEnd=true;
+    /* the seeded placeholder opens as a NEW wing — it was never anywhere to move from */
+    if(!EDW.fresh)movedTo=b3.floors.find(f=>f.id===fl);
   }
   w.name=nm;
 
@@ -9997,6 +10077,7 @@ $('#wgSave').addEventListener('click',()=>{
   for(const c of rooms)if(want.has(c.num)){out.push(want.get(c.num));want.delete(c.num);}
   S.rooms=out;
 
+  if(isPro())w.drawn=true;
   w.plan=LAY.cells.map(c=>{
     const o={t:c.t,x:c.x,y:c.y};
     if(c.t!=='hall'){o.w=cellW(c);o.h=cellH(c);}
@@ -11043,7 +11124,7 @@ function runActions(acts){
           nm=nm+' '+k;
         }
         snapshot();
-        const sim={id:uid(),name:nm,ts:Date.now(),assign:{...S.assign}};
+        const sim={id:uid(),name:nm,ts:Date.now(),assign:{...S.assign},locks:[...S.locks]};
         S.sims.push(sim);S.activeSim=sim.id;save();render();done.push(`נשמרה גרסה "${sim.name}"`);
       }
       else if(a.type==='loadSim'){
@@ -11081,7 +11162,8 @@ function runActions(acts){
         /* scoped to the open project — the advisor must never be able to wipe the others */
         const keepName=S.zman,keepDesc=S.desc;
         S=blankProject(); S.zman=keepName; S.desc=keepDesc;
-        UNDO.length=0;afterStateReplaced();
+        /* the advisor is mid-turn: its own conversation must survive the reset */
+        UNDO.length=0;afterStateReplaced(true);
         V={level:'home',bld:null,wing:null};
         save();initDynamic();applySettings();render();
         done.push('הפרויקט אופס למצב התחלתי');
