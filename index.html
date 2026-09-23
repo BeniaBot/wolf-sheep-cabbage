@@ -679,6 +679,9 @@ label.row.compact small{font-size:11px}
   /* above the rail (50), the sticky topbar (55), the assign drawer (65) and the AI
      button (70). Nothing that is not a modal dialog may cover a message. */
   opacity:0;pointer-events:none;transition:.25s;z-index:90;box-shadow:0 12px 34px var(--sh4);
+  /* a two-line message keeps its line break, and a long one is not a single
+     sentence running off both edges of the screen */
+  white-space:pre-line;max-width:min(560px,92vw);text-align:center;line-height:1.5;
 }
 #toast.show{opacity:1;transform:translateX(50%) translateY(0)}
 /* the same message, but painted INSIDE the open dialog. A modal <dialog> lives in
@@ -1481,6 +1484,18 @@ body.nopulse .pb-room.warn-hard{animation:none}
    ==================  building: floors on a drawn grid  ===============
    ===================================================================== */
 .fl-tabs{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:11px}
+.fl-acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:-3px 0 12px}
+/* the floor as a run of wing cards, right to left, like the sheet */
+.fseq{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;padding:10px;margin-bottom:8px;
+  border:1.5px dashed var(--line2);border-radius:14px}
+.fseq-w{display:flex;flex-direction:column;gap:6px;min-width:190px;max-width:260px;padding:10px 12px;
+  border:1.5px solid var(--line);border-radius:12px;background:var(--card2)}
+.fseq-w b{font-size:15px}
+.fseq-w small{color:var(--muted);font-size:11.5px;font-weight:700;margin-top:-4px}
+.fseq-w.dragover{outline:2px dashed var(--acc);outline-offset:2px}
+.fseq-acts{display:flex;gap:5px;flex-wrap:wrap;margin-top:auto}
+.fseq-ar{align-self:center;color:var(--dim);font-weight:900}
+.fseq-add{align-self:center}
 .fl-tab{
   background:var(--card2);border:1px solid var(--line);color:var(--dim);
   font:inherit;font-size:12.5px;font-weight:800;padding:6px 13px;border-radius:10px;
@@ -2011,6 +2026,7 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
     <h2>🏢 הבניין <span class="cnt" id="structBldName"></span></h2>
     <div class="dlgbtns wrap" id="structBldBar" style="margin:0 0 12px"></div>
     <div class="fl-tabs" id="bldFloors"></div>
+    <div class="fl-acts" id="bldFloorActs"></div>
     <div id="floorSeq"></div>
     <div class="le-tools" id="bldTools" style="margin-bottom:9px"></div>
     <div class="canvas" id="bldCanvas"><div class="canvas-in" id="bldGrid"></div></div>
@@ -2021,7 +2037,7 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
         <input type="text" id="bldBarName" style="width:100%">
       </div>
       <button class="btn mini accent" id="bldBarOpen">🚪 חדרים ופריסה</button>
-      <button class="btn mini danger" id="bldBarDel">🗑️ מחיקת האגף</button>
+      <button class="btn mini danger-btn" id="bldBarDel">🗑️ מחיקת האגף</button>
     </div>
   </section>
   <section class="panel" id="structWingsSec">
@@ -3425,7 +3441,7 @@ function migrate(s){
   s.buildings.forEach(b=>{
     b.floors=(Array.isArray(b.floors)?b.floors:[]).filter(f=>f&&f.id!=null)
       .map(f=>({id:String(f.id),name:String(f.name||'קומה').trim().slice(0,30)||'קומה'}));
-    if(!b.floors.length)b.floors=[{id:'f'+b.id,name:'קומה'}];
+    if(!b.floors.length)b.floors=[{id:'f'+b.id,name:'קומה א׳'}];
   });
   const floorHome=new Map();
   s.buildings.forEach(b=>b.floors.forEach(f=>floorHome.set(f.id,b.id)));
@@ -3872,6 +3888,8 @@ function toastHost(){
    which nobody who just deleted something by accident is going to go looking for. */
 function toast(msg,action){
   const host=toastHost();
+  /* long enough to actually read: a two-line explanation was gone in 2.6 seconds */
+  const readMs=base=>Math.min(10000,Math.max(action?6000:base,String(msg).length*60));
   /* only one message on screen at a time — otherwise closing an overlay reveals an
      old message underneath it that has nothing to do with what just happened */
   document.querySelectorAll('.dlg-toast.show').forEach(b=>{if(b.parentElement!==host)b.classList.remove('show');});
@@ -3896,12 +3914,12 @@ function toast(msg,action){
     let box=host.querySelector(':scope > .dlg-toast');
     /* createElement, not el() — a toast can fire during start-up, before el exists */
     if(!box){box=document.createElement('div');box.className='dlg-toast';host.appendChild(box);}
-    const ms=fill(box,action?6000:3200);
+    const ms=fill(box,readMs(3200));
     clearTimeout(toast._d); toast._d=setTimeout(()=>box.classList.remove('show'),ms);
     return;
   }
   const t=$('#toast');
-  const ms=fill(t,action?6000:2600);
+  const ms=fill(t,readMs(2600));
   clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),ms);
 }
 
@@ -5653,9 +5671,9 @@ function paintGuides(){
     ? guideEl('✓','המבנה מוגדר.',`${cnt(S.wings.length,"אגפים")} · ${cnt(S.rooms.length,"חדרים")}. אפשר לחזור לכאן ולשנות בכל רגע.`,
         [next({t:'לשלב הבא: הבחורים',v:'boys'})],true,isPro()?'struct':'structB')
     : isPro()
-      ? guideEl('🏗️','שלב 1 — בונים את הפנימייה.',
-          'בכל קומה מוסיפים אגפים לרצף — הם ממשיכים זה את זה לאורך המסדרון, וכל אגף נערך כרצועה כמו הדף המודפס. לבניין שבנוי אחרת יש שרטוט חופשי.',
-          [['❔ איך משרטטים',()=>openHelp('struct'),false]],false,'struct')
+      ? guideEl('🏗️','שלב 1 — אילו חדרים יש?',
+          'לוחצים "+ אגף ראשון בקומה" וממלאים כמה חדרים, כמה מיטות ומה המספר הראשון — כמו בדף שלכם.',
+          [['❔ איך בונים אגף',()=>openHelp('struct'),false]],false,'struct')
       : guideEl('🏗️','שלב 1 — אילו אגפים יש?',
           'ממלאים שם אגף, כמה חדרים וכמה מיטות בכל חדר — ולוחצים "הוספת אגף". זהו.',
           [['❔ איך מוסיפים אגף',()=>openHelp('structB'),false]],false,'structB'));
@@ -6675,42 +6693,46 @@ const HELP=[
          '<b>+ חדר</b> מוסיף חדר בודד לאגף; ✕ מוחק חדר או אגף שלם.']},
     {tip:'מחיקה אף פעם לא סופית — כל אגף וחדר שנמחקו יושבים ב<b>🗑️ סל המיחזור</b> וניתן להחזיר אותם.'}
    ]},
-  {id:'struct',pro:true,ico:'🏗️',t:'1 · מבנה: בניין ואגפים',lead:'כאן משרטטים את הפנימייה כמו שהיא באמת.',
+  {id:'struct',pro:true,ico:'🏗️',t:'1 · מבנה: בניין, קומות ואגפים',lead:'בונים את הפנימייה כמו הדף שתלוי על הקיר.',
    body:[
-    {p:'בניין מורכב מ<b>קומות</b>, וכל קומה מורכבת מ<b>אגפים</b>. אגף הוא מסדרון עם החדרים שסביבו.'},
-    {h:'לשרטט אגף'},
-    {ol:['בוחרים כלי <b>📐 שרטוט</b>.',
-         'גוררים מלבן על הרשת — <b>או</b> לוחצים על פינה אחת ואז על הפינה הנגדית. שתי הדרכים עובדות.',
-         'המלבן שנוצר הוא אגף. הוא מקבל שם, ואפשר לשנות אותו בשדה שמתחת לרשת.']},
-    {h:'אגף מפותל (ר׳, ח׳, ת׳)'},
-    {ol:['מסמנים את האגף (לחיצה עליו).',
-         'מציירים מלבן <b>נוסף</b> שמתחיל בתוכו — והשניים מתאחדים לצורה אחת.']},
-    {h:'הכלים'},
-    {ul:['<b>📐 שרטוט</b> — יוצר אגף חדש, או מרחיב את הנבחר.',
-         '<b>🖐️ הזזה</b> — גוררים אגף שלם למקום אחר.',
-         '<b>🧽 מחיקה</b> — מלבן שמוחק. מחיקת כל האגף שואלת אישור.']},
-    {tip:'קומות: כפתור <b>+ קומה</b> מוסיף קומה. לחיצה כפולה על שם קומה משנה אותו. כל קומה היא שרטוט נפרד.'}
+    {p:'בניין מורכב מ<b>קומות</b>, ובכל קומה <b>אגפים</b> שממשיכים זה את זה לאורך המסדרון. אגף הוא מסדרון עם החדרים משני צדדיו.'},
+    {h:'האגף הראשון'},
+    {ol:['לוחצים <b>+ אגף ראשון בקומה</b>.',
+         'ממלאים <b>כמה חדרים</b>, <b>מיטות בחדר</b> ו<b>מספר החדר הראשון</b> — הציור מתעדכן מיד.',
+         'לוחצים על הצורה הכי דומה לדף שלכם: שירותים באמצע, בקצה, חדרים בצד אחד.',
+         'מתקנים חדר־חדר אם צריך, ולוחצים <b>💾 שמירת האגף</b>.']},
+    {h:'עוד קומות'},
+    {ul:['<b>+ קומה</b> — קומה ריקה חדשה.',
+         '<b>📄 קומה נוספת זהה לזו</b> — אותם אגפים וחדרים, ומספרי החדרים עולים במאה (201 ← 301).',
+         '<b>✏️ שם הקומה</b> ו<b>🗑️ מחיקת הקומה</b> — לקומה שעל המסך.']},
+    {h:'שני אגפים באותה קומה'},
+    {ul:['<b>+ אגף בהמשך הקומה</b> מוסיף אגף שממשיך את הקודם.',
+         '<b>➡️ ימינה</b> ו<b>⬅️ שמאלה</b> על כרטיס האגף משנים את הסדר.',
+         'אגף שנמצא בקומה הלא נכונה: פותחים אותו ומחליפים את <b>קומה</b> בפרטים.']},
+    {tip:'בניין שבנוי אחרת — צורת ר׳, שני מסדרונות? <b>🖌️ ציור חופשי של הקומה</b> מאפשר לצייר את האגפים ביד.'}
    ]},
-  {id:'plan',pro:true,ico:'📐',t:'הפריסה בתוך אגף',lead:'מסדרון, חדרים, מקלחות — הכול על רשת אחת.',
+  {id:'plan',pro:true,ico:'📐',t:'עריכת אגף, חדר־חדר',lead:'כמו הדף המודפס: שורה מכל צד של המסדרון.',
    body:[
-    {p:'לוחצים על אגף ← <b>🚪 בניית החדרים</b>. נפתח עורך הפריסה.'},
-    {h:'הסדר שעובד'},
-    {ol:['<b>👣 מסדרון</b> — מציירים קודם את המסדרון. הוא יכול להתפתל ולפנות.',
-         '<b>🚪 חדר</b> — מלבן צמוד למסדרון. <b>גודל המלבן הוא גודל החדר</b>: משבצת אחת = חדר קטן, 3×2 = חדר גדול.',
-         'שאר המשבצות: מקלחות, שירותים, כניסה, יציאת חירום, שטח מת ועוד.']},
-    {h:'לשנות אחרי הציור'},
-    {ul:['<b>🖐️ בחירה והזזה</b> ואז לחיצה על משבצת פותחת את עורך המשבצת מתחת לרשת.',
-         'שם משנים מספר חדר, מספר מיטות, כיתוב — וגם <b>רוחב וגובה</b> על השרטוט.']},
-    {tip:'הדלת של כל חדר מצוירת אוטומטית בצד שנוגע במסדרון. חדר שלא נוגע במסדרון פשוט לא יקבל דלת — סימן טוב שמשהו בפריסה לא מדויק.'}
+    {p:'לוחצים <b>✏️ עריכת האגף</b>. בחלק <b>🧱 הפריסה</b> האגף מצויר כמו בדף — החדר הראשון מימין.'},
+    {h:'לתקן חדר'},
+    {ol:['לוחצים על החדר.',
+         'מתחת לשורות נפתח <b>✏️ חדר 203 — מה לשנות בו?</b>: מספר החדר, מיטות, וגודל על השרטוט.',
+         'שם גם <b>➡️ ימינה</b>, <b>⬅️ שמאלה</b>, <b>לצד השני של המסדרון</b> ו<b>🗑️ להוריד</b>.']},
+    {ul:['<b>+ חדר</b> ו<b>+ שירותים, מקלחות…</b> — מעל השורה העליונה ומתחת לתחתונה.',
+         '<b>גודל על השרטוט</b> הוא גודל החדר בבניין, בלי קשר למספר המיטות.']},
+    {tip:'שום דבר לא נשמר עד <b>💾 שמירת האגף</b>. יוצאים בלי לשמור? התוכנה שואלת קודם.'},
+    {h:'ציור חופשי'},
+    {p:'לקומה שלא בנויה כשתי שורות: <b>🖌️ ציור חופשי</b> — מסדרון שמתפתל, וחדרים מכל צד שלו. הדלת של כל חדר מצוירת לבד בצד שנוגע במסדרון.'}
    ]},
-  {id:'templates',pro:true,ico:'⭐',t:'תבניות קומה',lead:'רוב הקומות דומות — מציירים פעם אחת.',
+  {id:'templates',pro:true,ico:'⭐',t:'צורות ותבניות',lead:'רוב הקומות דומות — מסדרים פעם אחת.',
    body:[
-    {p:'בעורך האגף יש גלריית תבניות: קומה קלאסית, שירותים באמצע, חדרים בצד אחד ועוד. בוחרים אחת, קובעים כמה חדרים וכמה מיטות, ולוחצים <b>החלת התבנית</b> — הפריסה כולה נבנית.'},
+    {p:'בעורך האגף, מתחת למספרים, יש צורות מוכנות: קומה קלאסית, שירותים באמצע, חדרים בצד אחד ועוד. לוחצים על צורה — והאגף נבנה לפי מספר החדרים שכתבתם.'},
     {h:'תבנית משלכם'},
-    {ol:['מציירים קומה אחת בדיוק כמו שהיא.',
-         '<b>⭐ שמירה כתבנית חדשה</b>, נותנים שם — למשל "בניין חדש קלאסי".',
-         'בקומה הבאה בוחרים אותה, ומשנים רק את מה ששונה.']},
-    {p:'<b>📚 ניהול התבניות</b> מאפשר לערוך, לשכפל ולמחוק תבניות. שכפול הוא הדרך לבנות וריאציה בלי לפגוע במקור.'}
+    {ol:['מסדרים אגף אחד בדיוק כמו שהוא.',
+         '<b>⭐ לשמור את הצורה הזו כתבנית</b>, ונותנים שם — למשל "בניין חדש".',
+         'באגף הבא לוחצים עליה, ומשנים רק את מה ששונה.']},
+    {p:'<b>📚 ניהול התבניות</b> — הקופסה האחרונה בין הצורות — מאפשר לערוך, לשכפל ולמחוק.'},
+    {tip:'קומה שלמה זהה לאחרת? בדף המבנה יש <b>📄 קומה נוספת זהה לזו</b> — מהיר יותר מתבנית.'}
    ]},
   {id:'boys',ico:'👥',t:'2 · רשימת הבחורים',lead:'מי צריך מיטה.',
    body:[
@@ -7760,43 +7782,173 @@ function layoutFloorSequence(bid,fid,ids){
     x+=len;
   }
 }
+/* floors are named the way a yeshiva names them — קומה א׳, ב׳, ג׳ — not "קומה 2"
+   next to a first floor called "קומה" */
+const HEB_ORD=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ז׳','ח׳','ט׳','י׳','י״א','י״ב','י״ג','י״ד','ט״ו','ט״ז','י״ז','י״ח','י״ט','כ׳'];
+function nextFloorName(b){
+  /* the lone default floor of an older project was just "קומה" — nobody chose that */
+  if(b.floors.length===1&&b.floors[0].name==='קומה')b.floors[0].name='קומה א׳';
+  const used=new Set(b.floors.map(f=>f.name));
+  for(const h of HEB_ORD){const nm='קומה '+h;if(!used.has(nm))return nm;}
+  let k=b.floors.length+1; while(used.has('קומה '+k))k++;
+  return 'קומה '+k;
+}
+function renameFloor(b,f){
+  if(!f)return;
+  const nn=prompt('שם הקומה:',f.name);
+  if(!nn||!nn.trim()||nn.trim()===f.name)return;
+  snapshot(); f.name=nn.trim().slice(0,30);
+  save();bldPaint();render();
+  toast('שם הקומה עודכן',{label:'↩️ להחזיר',fn:undo});
+}
+function deleteFloor(b,f){
+  if(!f||b.floors.length<2)return;
+  const ws=floorWings(b.id,f.id),real=ws.filter(w=>!isGhostWing(w));
+  const rooms=S.rooms.filter(r=>ws.some(w=>w.id===r.wing));
+  const boys=rooms.reduce((a,r)=>a+occupants(r.num).length,0);
+  if(real.length&&!confirm(`למחוק את "${f.name}"?\n\nיימחקו ${cnt(real.length,'אגפים')} ו־${cnt(rooms.length,'חדרים')}`
+    +(boys?`, ו־${cnt(boys,'בחורים')} יחזרו לרשימת הממתינים`:'')+'.\n\nאפשר להחזיר מיד, בכפתור "↩️ להחזיר" שיופיע.'))return;
+  snapshot();
+  /* file the wings FIRST, then drop the rooms without filing them separately.
+     Filing rooms whose wing was deleted without a record of its own produced
+     trash entries that could never be redeemed — restoring a room requires its
+     wing to exist, and nothing anywhere held it. */
+  real.forEach(w=>trashWing(w));
+  dropRooms(rooms.map(r=>r.num),false);
+  S.wings=S.wings.filter(w=>!ws.some(x=>x.id===w.id));
+  b.floors=b.floors.filter(z=>z.id!==f.id);
+  /* the project always keeps somewhere to put a room */
+  if(!S.wings.length)S.wings=[{id:'w'+uid(),name:'אגף ראשי',building:b.id,floor:b.floors[0].id,plan:[]}];
+  EDB.floor=b.floors[0].id;EDB.sel=null;
+  save();bldPaint();render();
+  toast(`"${f.name}" נמחקה`,{label:'↩️ להחזיר',fn:undo});
+}
+/* "קומה ג׳ is the same as ב׳" is the most common thing a building has to say.
+   One click: a new floor with the same wings, rooms, beds and shapes, every room
+   number moved up by a hundred (or two, if the next hundred is taken). */
+function copyFloor(b,src){
+  const ws=floorWingsOrdered(b.id,src.id).filter(w=>!isGhostWing(w));
+  const rooms=S.rooms.filter(r=>ws.some(w=>w.id===r.wing));
+  if(!rooms.length)return;
+  const shift=(num,off)=>{
+    const m=String(num).match(/^(.*?)(\d+)(\D*)$/);
+    return m?m[1]+String(+m[2]+off).padStart(m[2].length,'0')+m[3]:null;
+  };
+  let off=0;
+  for(let k=1;k<=50&&!off;k++)
+    if(rooms.every(r=>{const n=shift(r.num,100*k);return n&&!roomBy(n);}))off=100*k;
+  if(!off){toast('אי אפשר להעתיק את הקומה אוטומטית — מספרי החדרים בה אינם מספרים.\nמוסיפים קומה ובונים את האגפים שלה.');return;}
+  snapshot();
+  const f={id:'f'+uid(),name:nextFloorName(b)};
+  b.floors.push(f);
+  const wname=w=>{
+    let nm;
+    if(w.name===src.name)nm=f.name;
+    else{
+      const m=w.name.match(/^(.*?)(\d{3,})(\D*)$/);      /* "אגף 200" → "אגף 300" */
+      nm=m?m[1]+(+m[2]+off)+m[3]:w.name+' · '+f.name;
+    }
+    const base=nm; let k=2;
+    while(S.wings.some(x=>x.name===nm))nm=base+' ('+(k++)+')';
+    return nm;
+  };
+  const made=[];
+  for(const w of ws){
+    const nw={id:'w'+uid(),name:wname(w),building:b.id,floor:f.id,
+      plan:(w.plan||[]).map(c=>c.t==='room'?{...c,num:shift(c.num,off)}:{...c}),
+      geom:w.geom?JSON.parse(JSON.stringify(w.geom)):null};
+    S.wings.push(nw);
+    for(const r of roomsOf(w.id)){
+      const num=shift(r.num,off);
+      S.rooms.push({num,beds:r.beds,wing:nw.id}); made.push(num);
+    }
+  }
+  EDB.floor=f.id;EDB.sel=null;
+  save();bldPaint();render();
+  made.sort((p,q)=>p.localeCompare(q,'he',{numeric:true}));
+  toast(`נוצרה "${f.name}" — זהה ל"${src.name}": ${cnt(made.length,'חדרים')}, ${made[0]} עד ${made[made.length-1]}.\n`
+    +'אפשר לשנות בה כל אגף ב"✏️ עריכת האגף".',{label:'↩️ להחזיר',fn:undo});
+}
+/* a floor whose wings were drawn by hand on the free canvas (an L, two corridors)
+   has no single row to reorder — straightening it would destroy the drawing */
+const floorDrawnFree=(bid,fid)=>floorWings(bid,fid).some(w=>w.geom&&w.geom.cells
+  &&w.geom.cells.length&&!w.geom.cells.every(c=>c.y===w.geom.cells[0].y));
+function reorderFloorWing(b,fid,id,dir){
+  const order=floorWingsOrdered(b.id,fid).filter(w=>!isGhostWing(w)).map(w=>w.id);
+  const i=order.indexOf(id),j=i+dir;
+  if(i<0||j<0||j>=order.length)return;
+  [order[i],order[j]]=[order[j],order[i]];
+  snapshot();
+  layoutFloorSequence(b.id,fid,order);
+  save();bldPaint();render();
+  toast('סדר האגפים בקומה עודכן',{label:'↩️ להחזיר',fn:undo});
+}
+/* The floor, the way the sheet on the wall shows it: its wings one after the
+   other along the corridor, starting at the right. Each wing is a card with its
+   small drawing and worded buttons — open it, move it right or left. */
 function renderFloorSeq(b){
   const host=$('#floorSeq'); if(!host)return; host.innerHTML='';
-  const ws=floorWingsOrdered(b.id,EDB.floor);
-  const box=el('div','strip-row'); box.style.marginBottom='10px';
-  if(!ws.length)box.appendChild(el('span','bl','עדיין אין אגפים בקומה הזו — מוסיפים בכפתור שמימין'));
+  const f=b.floors.find(x=>x.id===EDB.floor)||b.floors[0];
+  const ws=floorWingsOrdered(b.id,f.id).filter(w=>!isGhostWing(w));
+  const free=floorDrawnFree(b.id,f.id);
+  const ev=evaluate(S.assign);
+  const box=el('div','fseq');
   ws.forEach((w,i)=>{
-    if(i){const ar=el('span','bl','←');ar.style.alignSelf='center';box.appendChild(ar);}
-    const d=el('div','sc');
-    d.append(el('b',null,w.name),el('small',null,cnt(roomsOf(w.id).length,'חדרים')));
-    d.title='לחיצה — פתיחת האגף · גרירה — שינוי הסדר לאורך הקומה';
-    d.addEventListener('click',()=>openWing(w.id));
-    d.draggable=true;
-    d.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',w.id));
-    d.addEventListener('dragover',e=>{e.preventDefault();d.classList.add('dragover');});
-    d.addEventListener('dragleave',()=>d.classList.remove('dragover'));
-    d.addEventListener('drop',e=>{
-      e.preventDefault();
-      const src=e.dataTransfer.getData('text/plain');
-      if(!src||src===w.id||!wingBy(src))return;
-      const order=floorWingsOrdered(b.id,EDB.floor).map(x2=>x2.id).filter(x2=>x2!==src);
-      order.splice(order.indexOf(w.id),0,src);
-      snapshot();
-      layoutFloorSequence(b.id,EDB.floor,order);
-      save();bldPaint();render();
-      toast('סדר האגפים בקומה עודכן — ↩️ ביטול מחזיר');
-    });
+    if(i)box.appendChild(el('span','fseq-ar','←'));
+    const rooms=roomsOf(w.id);
+    const d=el('div','fseq-w');
+    d.append(el('b',null,w.name),
+      el('small',null,rooms.length
+        ?`${cnt(rooms.length,'חדרים')} · ${cnt(rooms.reduce((a,r)=>a+r.beds,0),'מיטות')}`:'עדיין בלי חדרים'));
+    if(rooms.length)d.appendChild(miniPlan(w,ev));
+    const acts=el('div','fseq-acts');
+    acts.appendChild(mini(rooms.length?'✏️ עריכת האגף':'🚪 בניית החדרים',()=>openWing(w.id),
+      rooms.length?'':'accent'));
+    if(ws.length>1&&!free){
+      if(i>0)acts.appendChild(mini('➡️ ימינה',()=>reorderFloorWing(b,f.id,w.id,-1)));
+      if(i<ws.length-1)acts.appendChild(mini('⬅️ שמאלה',()=>reorderFloorWing(b,f.id,w.id,1)));
+    }
+    d.appendChild(acts);
+    const nl=noteLine('wing',w.id); if(nl)d.appendChild(nl);
+    /* dragging stays as a shortcut for those who try it */
+    if(!free){
+      d.draggable=true;
+      d.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',w.id));
+      d.addEventListener('dragover',e=>{e.preventDefault();d.classList.add('dragover');});
+      d.addEventListener('dragleave',()=>d.classList.remove('dragover'));
+      d.addEventListener('drop',e=>{
+        e.preventDefault();d.classList.remove('dragover');
+        const src=e.dataTransfer.getData('text/plain');
+        if(!src||src===w.id||!wingBy(src))return;
+        const order=ws.map(x2=>x2.id).filter(x2=>x2!==src);
+        order.splice(order.indexOf(w.id),0,src);
+        snapshot();
+        layoutFloorSequence(b.id,f.id,order);
+        save();bldPaint();render();
+        toast('סדר האגפים בקומה עודכן',{label:'↩️ להחזיר',fn:undo});
+      });
+    }
     box.appendChild(d);
   });
-  const add=el('button','btn mini accent','+ אגף בהמשך הקומה');
-  add.addEventListener('click',()=>openWing(null,b.id,EDB.floor));
+  const add=el('button','btn accent fseq-add',ws.length?'+ אגף בהמשך הקומה':'+ אגף ראשון בקומה');
+  add.title=ws.length?'אגף שממשיך את הקומה הזו לאורך המסדרון':'';
+  add.addEventListener('click',()=>openWing(null,b.id,f.id));
   box.appendChild(add);
   host.appendChild(box);
-  const tg=el('button','btn mini',
-    STR.canvas?'🖌️ סגירת השרטוט החופשי':'🖌️ שרטוט חופשי של הקומה — לבניין שבנוי אחרת');
-  tg.style.marginBottom='10px';
-  tg.addEventListener('click',()=>{dropBldAnchor();STR.canvas=!STR.canvas;bldPaint();});
-  host.appendChild(tg);
+  if(!ws.length)host.appendChild(el('p','hint',
+    `עדיין אין אגפים ב"${f.name}". לוחצים על "+ אגף ראשון בקומה" וממלאים כמה חדרים יש — כמו בדף שלכם.`));
+  if(ws.length>1)host.appendChild(el('p','hint',free
+    ?'הקומה הזו צוירה בציור החופשי — את סדר האגפים משנים שם.'
+    :'האגפים ממשיכים זה את זה לאורך המסדרון, מימין לשמאל. "ימינה" ו"שמאלה" מזיזים אגף.'));
+  /* the free canvas is for a floor built differently — nothing to decide before
+     there is a wing on it */
+  if(ws.length){
+    const tg=el('button','btn mini',
+      STR.canvas?'🖌️ סגירת הציור החופשי':'🖌️ ציור חופשי של הקומה — לבניין שבנוי אחרת');
+    tg.style.margin='4px 0 10px';
+    tg.addEventListener('click',()=>{dropBldAnchor();STR.canvas=!STR.canvas;bldPaint();});
+    host.appendChild(tg);
+  }else STR.canvas=false;
 }
 /* =====================================================================
    ==================  basic mode: a flat list of wings  ===============
@@ -8010,7 +8162,9 @@ function renderStruct(){
   document.body.classList.toggle('basic',!isPro());
   $('#structBasic').hidden=isPro();
   $('#structPro').hidden=!isPro();
-  $('#structWingsSec').hidden=!isPro();
+  /* the wing cards now live in the floor row itself, one floor at a time — a second
+     list of every wing in the building below it said the same thing twice */
+  $('#structWingsSec').hidden=true;
   if(!isPro()){renderStructBasic();return;}
   renderModeBar();
   if(!STR.bld||!bldBy(STR.bld))STR.bld=S.buildings[0].id;
@@ -8042,7 +8196,7 @@ function renderStructWings(){
   const ev=evaluate(S.assign);
   const ws=wingsOf(STR.bld);
   if(!ws.length){
-    box.appendChild(el('div','empty-note','עדיין אין אגפים — גררו קו על הרשת למעלה כדי ליצור את הראשון.'));
+    box.appendChild(el('div','empty-note','עדיין אין אגפים — לוחצים למעלה על "+ אגף ראשון בקומה".'));
     return;
   }
   for(const w of ws){
@@ -8080,52 +8234,35 @@ function bldPaint(){
   $('#structHint').style.display=cv?'':'none';
   if(!cv)$('#bldBarEd').hidden=true;
   /* ---- floor tabs ---- */
+  /* the floors as tabs — a click moves between them, and that is all a tab does.
+     Renaming was a double-click and deleting a faint ✕ inside the tab: one he would
+     never find, the other he would hit while trying to switch floors. Both are now
+     worded buttons for the floor on screen, next to "+ קומה". */
   const ft=$('#bldFloors'); ft.innerHTML='';
   b.floors.forEach(f=>{
     const t=el('button','fl-tab'+(f.id===EDB.floor?' on':''));
     t.appendChild(el('span',null,f.name));
-    const n=floorWings(b.id,f.id).length;
-    t.appendChild(el('span','fx',n?`(${n})`:'(ריקה)'));
-    t.title='לחיצה כפולה — שינוי שם הקומה';
+    const n=floorWings(b.id,f.id).filter(w=>!isGhostWing(w)).length;
+    t.appendChild(el('span','fx',n?'· '+cnt(n,'אגפים'):'· ריקה'));
     t.addEventListener('click',()=>{dropBldAnchor();EDB.floor=f.id;EDB.sel=null;bldPaint();});
-    t.addEventListener('dblclick',()=>{
-      const nn=prompt('שם הקומה:',f.name);
-      if(nn&&nn.trim()){snapshot();f.name=nn.trim().slice(0,30);save();bldPaint();render();}
-    });
-    if(b.floors.length>1){
-      const x=el('span','fx','✕');
-      x.title='מחיקת הקומה';
-      x.addEventListener('click',e=>{
-        e.stopPropagation();
-        const ws=floorWings(b.id,f.id);
-        const rooms=S.rooms.filter(r=>ws.some(w=>w.id===r.wing));
-        if(!confirm(`למחוק את "${f.name}"?\n\n${ws.length} אגפים ו־${rooms.length} חדרים יימחקו איתה.\nאפשר להחזיר מיד בכפתור ↩️ ביטול שלמעלה.`))return;
-        snapshot();
-        /* file the wings FIRST, then drop the rooms without filing them separately.
-           Filing rooms whose wing was deleted without a record of its own produced
-           trash entries that could never be redeemed — restoring a room requires its
-           wing to exist, and nothing anywhere held it. They just sat in the 60-item
-           bin pushing real entries out. */
-        ws.forEach(w=>trashWing(w));
-        dropRooms(rooms.map(r=>r.num),false);
-        S.wings=S.wings.filter(w=>!ws.some(x2=>x2.id===w.id));
-        b.floors=b.floors.filter(z=>z.id!==f.id);
-        EDB.floor=b.floors[0].id;EDB.sel=null;
-        save();bldPaint();render();
-      });
-      t.appendChild(x);
-    }
     ft.appendChild(t);
   });
   const add=el('button','btn mini','+ קומה');
   add.addEventListener('click',()=>{
     snapshot();
-    const f={id:'f'+uid(),name:'קומה '+(b.floors.length+1)};
+    const f={id:'f'+uid(),name:nextFloorName(b)};
     dropBldAnchor();
     b.floors.push(f); EDB.floor=f.id; EDB.sel=null;
     save();bldPaint();render();
+    toast(`נוספה "${f.name}"`,{label:'↩️ להחזיר',fn:undo});
   });
   ft.appendChild(add);
+  const cur=b.floors.find(f=>f.id===EDB.floor);
+  const fa=$('#bldFloorActs'); fa.innerHTML='';
+  fa.appendChild(mini('✏️ שם הקומה',()=>renameFloor(b,cur)));
+  if(floorWings(b.id,cur.id).some(w=>!isGhostWing(w)&&roomsOf(w.id).length))
+    fa.appendChild(mini('📄 קומה נוספת זהה לזו',()=>copyFloor(b,cur)));
+  if(b.floors.length>1)fa.appendChild(mini('🗑️ מחיקת הקומה',()=>deleteFloor(b,cur),'danger-btn'));
 
   /* ---- the tools ---- */
   if(!EDB.tool)EDB.tool='draw';
@@ -8415,7 +8552,7 @@ $('#bldSave').addEventListener('click',()=>{
   STR.bld=b.id; EDB={id:b.id,icon:b.icon,floor:b.floors[0].id,sel:null};
   save();$('#dlgBld').close();
   setTab('struct');
-  toast('הבניין נוצר — עכשיו מותחים קו על הרשת לכל אגף');
+  toast('הבניין נוצר — עכשיו לוחצים "+ אגף ראשון בקומה"');
 });
 /* takes the building explicitly. The struct-page shortcut used to pass it by
    overwriting EDB and then clicking this button — so pressing Cancel left the
