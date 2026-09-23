@@ -1728,6 +1728,10 @@ body.nopulse .pb-room.warn-hard{animation:none}
 }
 .nbtn:hover{opacity:1;background:var(--card2);filter:none}
 .nbtn.has{opacity:.95;filter:none}
+/* the worded one is a real button, not a faint grey glyph */
+.nbtn.worded{opacity:1;filter:none;font:inherit;font-size:12px;font-weight:800;color:var(--muted);
+  border:1px solid var(--line2);background:var(--card2);padding:4px 9px}
+.nbtn.worded:hover{color:var(--tx);border-color:var(--hover)}
 .note-line{
   display:flex;align-items:flex-start;gap:7px;margin-top:7px;
   background:color-mix(in srgb,var(--amber) 7%,transparent);
@@ -4707,7 +4711,7 @@ function heroEl(ev){
   L.appendChild(h1);
   const heroNote=el('div','empty-note');
   heroNote.append(document.createTextNode('לחיצה על שם הזמן משנה אותו · הכול נשמר מקומית במכשיר הזה '));
-  heroNote.appendChild(noteBtn('project','','הערה על הפרויקט'));
+  heroNote.appendChild(noteBtn('project','','הערה על הפרויקט',true));
   L.appendChild(heroNote);
   const pnl=noteLine('project','');
   if(pnl)L.appendChild(pnl);
@@ -4951,7 +4955,7 @@ function renderWing(host,ev){
     });
     barRow.appendChild(sel);
   }
-  barRow.appendChild(noteBtn('wing',w.id,'הערה על '+w.name));
+  barRow.appendChild(noteBtn('wing',w.id,'הערה על '+w.name,true));
   if(isPro())barRow.appendChild(mini('🖨️ דף הקומה',()=>printFloorSheet(w.building,w.floor)));
   barRow.appendChild(mini(isPro()?'⚙️ פריסה וחדרים':'⚙️ חדרים',
     ()=>{if(isPro())openWing(w.id);else setTab('struct');}));
@@ -5146,7 +5150,7 @@ function roomEl(room,ev){
   const door=el('div','fp-door'); door.appendChild(el('i'));
   const head=el('div','fp-head');
   head.appendChild(el('span','no',room.num));
-  head.appendChild(noteBtn('room',room.num,'הערה על חדר '+room.num));
+  head.appendChild(noteBtn('room',room.num,'הערה על חדר '+room.num,true));
   head.appendChild(el('span','occ'+(free?'':' fullr'),`${occ.length}/${room.beds}`));
 
   const slots=el('div','fp-slots');
@@ -7249,9 +7253,11 @@ function refreshNoteHosts(){
   if($('#dlgEdit').open&&ED)renderEdit();
 }
 /* the 📝 button that hangs off any row or bar */
-function noteBtn(kind,id,title){
+/* worded where there is room for it: a bare 🗒️ says nothing until hovered, and a
+   man who never hovers never learns he can write a note on a wing */
+function noteBtn(kind,id,title,worded){
   const has=!!noteOf(kind,id);
-  const b=el('button','nbtn'+(has?' has':''),has?'📝':'🗒️');
+  const b=el('button','nbtn'+(has?' has':'')+(worded?' worded':''),(has?'📝':'🗒️')+(worded?' הערה':''));
   b.title=has?noteOf(kind,id):'הוספת הערה';
   b.addEventListener('click',e=>{e.stopPropagation();openNote(kind,id,title);});
   return b;
@@ -8032,6 +8038,7 @@ function renderFloorSeq(b){
       if(i>0)acts.appendChild(mini('➡️ ימינה',()=>reorderFloorWing(b,f.id,w.id,-1)));
       if(i<ws.length-1)acts.appendChild(mini('⬅️ שמאלה',()=>reorderFloorWing(b,f.id,w.id,1)));
     }
+    acts.appendChild(noteBtn('wing',w.id,'הערה על '+w.name,true));
     d.appendChild(acts);
     const nl=noteLine('wing',w.id); if(nl)d.appendChild(nl);
     /* dragging stays as a shortcut for those who try it */
@@ -8158,7 +8165,7 @@ function renderStructBasic(){
     head.appendChild(nm);
     head.appendChild(el('span','bw-sum',
       `${cnt(rooms.length,"חדרים")} · ${cnt(rooms.reduce((a,r)=>a+r.beds,0),"מיטות")}`));
-    head.appendChild(noteBtn('wing',w.id,'הערה על '+w.name));
+    head.appendChild(noteBtn('wing',w.id,'הערה על '+w.name,true));
     /* a bare ✕ reads as "close this card" — and this one deleted the wing */
     const del=el('button','btn mini danger-btn','🗑️ מחיקת האגף'); del.title='מחיקת האגף וכל חדריו';
     del.addEventListener('click',()=>{
