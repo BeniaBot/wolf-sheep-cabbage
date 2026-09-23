@@ -704,6 +704,10 @@ label.row.compact small{font-size:11px}
   background:var(--acc);color:#062028;border:none;border-radius:8px;padding:4px 12px;cursor:pointer;
 }
 .toast-act:hover{filter:brightness(1.12)}
+/* a message with a button turns clickable while it shows — and must stop the moment
+   it fades. It kept pointer-events after fading, so a click at the bottom centre of
+   the screen could press an invisible "↩️ להחזיר" and undo something unseen. */
+#toast:not(.show),.dlg-toast:not(.show){pointer-events:none!important}
 .dlg-toast.warn{border-color:color-mix(in srgb,var(--amber) 60%,transparent)}
 dialog{
   background:linear-gradient(180deg,var(--sheen),transparent 22%),var(--card);
@@ -886,7 +890,7 @@ body.rail-off{--railW:0px}
 body.no-project{--railW:0px;padding-inline-end:clamp(14px,3.5vw,46px)}
 body.no-project #rail,body.no-project .rl-toggle,body.no-project #assignBar{display:none!important}
 body.no-project #topbar{margin-left:calc(clamp(14px,3.5vw,46px) * -1);padding-left:clamp(14px,3.5vw,46px)}
-body.no-project #btnAuto,body.no-project #btnClear,
+body.no-project #btnAuto,body.no-project #btnClear,body.no-project #btnUndo,
 body.no-project #btnXlsx,body.no-project #btnProjects,
 body.no-project #aiFab,body.no-project #aiPanel{display:none!important}
 
@@ -3595,10 +3599,14 @@ function saveIndex(){
   }catch(e){warnQuota();}
 }
 const projMeta=id=>IX.projects.find(p=>p.id===id);
-function projSummary(){
-  return {boys:S.boys.length,rooms:S.rooms.length,wings:S.wings.length,
-          buildings:S.buildings.length,placed:S.boys.filter(b=>S.assign[b]).length};
+/* the card of ANY project — a duplicated or migrated one showed "0 בחורים" on its
+   card and in the delete question, because only the open project was ever counted */
+function summaryOf(p){
+  const boys=p.boys||[],asg=p.assign||{};
+  return {boys:boys.length,rooms:(p.rooms||[]).length,wings:(p.wings||[]).length,
+          buildings:(p.buildings||[]).length,placed:boys.filter(b=>asg[b]).length};
 }
+function projSummary(){return summaryOf(S);}
 /* a failed write must never go quiet: the board keeps rendering from memory and
    looks perfectly healthy while nothing is reaching disk */
 function warnQuota(){
@@ -3746,7 +3754,7 @@ function deleteProject(id){
   try{localStorage.removeItem(pKey(id));}catch(e){}
   IX.projects=IX.projects.filter(p=>p.id!==id);
   if(IX.active===id)IX.active=null;
-  if(PID===id){PID=null;S=blankProject();}
+  if(PID===id){PID=null;S=blankProject();UNDO.length=0;}
   saveIndex();
 }
 function duplicateProject(id){
@@ -3756,7 +3764,7 @@ function duplicateProject(id){
   s.zman=(m?m.name:'פרויקט')+' — עותק';
   try{localStorage.setItem(pKey(nid),JSON.stringify(s));}catch(e){warnQuota();return null;}
   IX.projects.push({id:nid,name:s.zman,desc:(m&&m.desc)||'',
-    created:Date.now(),modified:Date.now(),sum:{}});
+    created:Date.now(),modified:Date.now(),sum:summaryOf(s)});
   saveIndex();
   return nid;
 }
@@ -3774,7 +3782,7 @@ function bootProjects(){
           localStorage.setItem(pKey(id),legacy);
           IX.projects.push({id,name:String(o.zman||'הפרויקט שלי'),
             desc:'הועבר אוטומטית מהגרסה הקודמת',
-            created:Date.now(),modified:Date.now(),sum:{}});
+            created:Date.now(),modified:Date.now(),sum:summaryOf(o)});
           IX.active=id;
           saveIndex();
         }
@@ -3977,12 +3985,21 @@ const UNDO_KEYS=['assign','locks','rules','boys','rooms','wings','buildings',
                  'templates','groups','sims','zman','desc','notes','trash','mode'];
 const isPro=()=>S.mode==='pro';
 function snapshot(){
+  /* a message's '↩️ להחזיר' undoes THE LATEST step. Once another step is recorded
+     it would undo that one instead of the thing it was shown with — so it goes. */
+  document.querySelectorAll('#toast.show,.dlg-toast.show').forEach(t=>{
+    if(t.querySelector('.toast-act'))t.classList.remove('show');
+  });
   const o={};
   for(const k of UNDO_KEYS)o[k]=S[k];
   UNDO.push(JSON.stringify(o));
   if(UNDO.length>60)UNDO.shift();
+  paintUndo();              /* the button lights up with the step, not on the next repaint */
 }
 function undo(){
+  /* on the projects screen the board underneath is the project just LEFT — undoing
+     there changed a project nobody was looking at */
+  if(!PID||V.level==='projects')return;
   if(!UNDO.length){toast('אין מה לבטל');return;}
   const p=JSON.parse(UNDO.pop());
   for(const k of UNDO_KEYS)if(p[k]!==undefined)S[k]=p[k];
@@ -3994,7 +4011,7 @@ function undo(){
    user can actually SEE and press rather than a keyboard secret */
 function paintUndo(){
   const b=$('#btnUndo'); if(!b)return;
-  b.disabled=!UNDO.length;
+  b.disabled=!UNDO.length||!PID||V.level==='projects';
   b.title=UNDO.length?'ביטול הפעולה האחרונה (Ctrl+Z)':'אין כרגע מה לבטל';
 }
 function askConfirm(msg){return S.settings.confirm?confirm(msg):true;}
@@ -8557,19 +8574,25 @@ function barEl(w,edit){
     e.preventDefault();clearAnchor();
   });
 })();
+/* typing only moves the label on the drawing; the name itself changes on blur, AFTER
+   the undo step is recorded — writing it on every keystroke meant the step recorded
+   on blur already held the new name, so ↩️ ביטול could never bring the old one back */
+$('#bldBarName').addEventListener('focus',()=>{
+  const w=EDB&&EDB.sel?wingBy(EDB.sel):null;
+  $('#bldBarName').dataset.was=w?w.name:'';
+});
 $('#bldBarName').addEventListener('input',()=>{
   const w=EDB&&EDB.sel?wingBy(EDB.sel):null; if(!w)return;
-  w.name=$('#bldBarName').value.slice(0,40)||w.name;
   /* shapes are drafted now — the live label is .slabel, not the old .bar .bl */
   const node=$('#bldGrid').querySelector('.shape.sel .slabel');
-  if(node)node.textContent=w.name;
+  if(node)node.textContent=$('#bldBarName').value.slice(0,40)||w.name;
 });
 $('#bldBarName').addEventListener('blur',()=>{
   const w=EDB&&EDB.sel?wingBy(EDB.sel):null; if(!w)return;
   const nn=($('#bldBarName').value.trim()||w.name).slice(0,40);
-  if(nn!==w.name){snapshot();w.name=nn;}
-  else w.name=nn;
-  save();renderSoon(()=>{bldPaint();render();});
+  $('#bldBarName').value=nn;
+  if(nn!==w.name){snapshot();w.name=nn;save();}
+  renderSoon(()=>{bldPaint();render();});
 });
 $('#bldBarOpen').addEventListener('click',()=>{
   if(!EDB||!EDB.sel)return;
@@ -8647,7 +8670,7 @@ function deleteBuilding(id){
   save();$('#dlgBld').close();
   V={level:'home',bld:null,wing:null};
   STR.bld=S.buildings[0].id; EDB=null;
-  if(SEC==='struct')renderStruct(); else render();
+  render();            /* the undo button, the waiting rail and the stats repaint too */
   toast('הבניין נמחק',{label:'↩️ להחזיר',fn:undo});
 }
 $('#bldDel').addEventListener('click',()=>deleteBuilding(EDB&&EDB.id));
