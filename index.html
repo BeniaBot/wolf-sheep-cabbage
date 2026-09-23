@@ -2506,6 +2506,10 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
             <label>בניין</label>
             <select id="wgBld"></select>
           </div>
+          <div class="wiz-f">
+            <label>קומה</label>
+            <select id="wgFloor"></select>
+          </div>
         </div>
       </div>
 
@@ -7671,6 +7675,21 @@ let STR={bld:null,canvas:false};
    The sequence is the primary editor; reordering it lays the wings' shapes out
    on the canvas automatically, end to end, wrapping when the corridor turns.
    The free canvas stays one click away for buildings that really are irregular. */
+/* A new project is seeded with one empty wing so the data model always has somewhere
+   to put a room. Nobody made it: it must not appear on screen as if they had, and it
+   bows out as soon as a real wing exists. */
+const isGhostWing=w=>!!w&&w.name==='אגף ראשי'&&!roomsOf(w.id).length
+  &&!(w.plan||[]).length&&!noteOf('wing',w.id);
+/* a wing added "בהמשך הקומה" (or moved to this floor) goes at the END of the row.
+   On a floor drawn freely there is no row to append to — syncLayouts finds it a
+   free spot instead, and the drawing someone made by hand is left alone. */
+function appendWingToFloor(w){
+  const others=floorWingsOrdered(w.building,w.floor).filter(x=>x.id!==w.id&&!isGhostWing(x));
+  const inRow=x=>!x.geom||!x.geom.cells||!x.geom.cells.length
+    ||x.geom.cells.every(c=>c.y===x.geom.cells[0].y);
+  if(others.every(inRow))layoutFloorSequence(w.building,w.floor,[...others.map(x=>x.id),w.id]);
+  else delete w.geom;
+}
 function floorWingsOrdered(bid,fid){
   const ws=S.wings.filter(w=>w.building===bid&&w.floor===fid);
   const key=w=>w.geom&&w.geom.cells&&w.geom.cells.length
@@ -7719,7 +7738,7 @@ function renderFloorSeq(b){
     box.appendChild(d);
   });
   const add=el('button','btn mini accent','+ אגף בהמשך הקומה');
-  add.addEventListener('click',()=>openWing(null,b.id));
+  add.addEventListener('click',()=>openWing(null,b.id,EDB.floor));
   box.appendChild(add);
   host.appendChild(box);
   const tg=el('button','btn mini',
@@ -7771,8 +7790,7 @@ function renderStructBasic(){
      Showing it as an empty card under a message that says "עדיין אין" — while the
      counter announces "אגף אחד" — read as the screen contradicting itself. As long
      as it is the only wing and untouched, the screen honestly says: nothing yet. */
-  const ghost=S.wings.length===1&&S.wings[0].name==='אגף ראשי'
-    &&!S.rooms.length&&!(S.wings[0].plan||[]).length&&!noteOf('wing',S.wings[0].id);
+  const ghost=S.wings.length===1&&isGhostWing(S.wings[0]);
   $('#bwCnt').textContent=S.wings.length&&!ghost
     ? `${cnt(S.wings.length,"אגפים")} · ${cnt(S.rooms.length,"חדרים")} · ${cnt(beds,"מיטות")}` : 'עדיין אין';
   /* the add row's start number: the markup default is 401, and after a reload it
@@ -7926,8 +7944,7 @@ $('#bwAdd').addEventListener('click',()=>{
      placeholder is just a second card nobody asked for — and the guide counting
      "2 אגפים" after adding one is exactly the kind of thing that makes people
      distrust the screen. Drop it, but only while it is genuinely untouched. */
-  S.wings=S.wings.filter(x=>
-    x.id===w.id||!(x.name==='אגף ראשי'&&!roomsOf(x.id).length&&!noteOf('wing',x.id)&&!(x.plan||[]).length));
+  S.wings=S.wings.filter(x=>x.id===w.id||!isGhostWing(x));
   $('#bwName').value='';
   $('#bwStart').value=roomNums(nums[nums.length-1],2)[1];
   save();render();
@@ -8382,7 +8399,7 @@ $('#bldDel').addEventListener('click',()=>deleteBuilding(EDB&&EDB.id));
 
 /* ---------------- wing: details, template, layout ---------------- */
 let EDW=null;
-function openWing(id,bldId){
+function openWing(id,bldId,floorId){
   dropLayAnchor();
   const w=id?wingBy(id):null;
   const cells=[];
@@ -8395,14 +8412,21 @@ function openWing(id,bldId){
     }else cells.push({t:c.t,label:c.label||'',x:c.x,y:c.y,
                       ...(c.t==='hall'?{}:{w:cellW(c),h:cellH(c)})});
   }
-  EDW={id:id||null,building:w?w.building:(bldId||S.buildings[0].id),tpl:null};
+  /* the wing belongs to a FLOOR, decided here: its own for an existing wing, else the
+     one the button was pressed on. It used to be decided at save time as "the
+     building's first floor" — so "+ אגף בהמשך הקומה" on floor ב׳ built the wing on א׳. */
+  const b0=bldBy(w?w.building:bldId)||S.buildings[0];
+  const onFloor=f=>f&&b0.floors.some(x=>x.id===f);
+  const fl0=w&&onFloor(w.floor)?w.floor
+    :onFloor(floorId)?floorId
+    :(EDB&&EDB.id===b0.id&&onFloor(EDB.floor))?EDB.floor:b0.floors[0].id;
+  EDW={id:id||null,building:b0.id,floor:fl0,tpl:null};
   /* one value for both the field and the draft. It used to be read from #wgBeds
      BEFORE the line below overwrote that field, and nothing resets the field on
      close — so a hand-drawn room got a bed count contradicting the one on screen. */
   const defBeds=Math.max(1,Math.min(12,(cells.find(c=>c.t==='room')||{}).beds||4));
   WLAY={root:$('#wgLayEd'),cells,sel:null,numbered:true,tool:cells.length?'move':'hall',defBeds};
   LAY=WLAY;
-  $('#wgTtl').textContent=w?'🏗️ '+w.name:'🏗️ אגף חדש';
   $('#wgName').value=w?w.name:'';
   const sel=$('#wgBld'); sel.innerHTML='';
   for(const b of S.buildings){
@@ -8412,6 +8436,7 @@ function openWing(id,bldId){
   }
   sel.value=EDW.building;
   sel.parentElement.style.display=S.buildings.length>1?'':'none';
+  fillWingFloors();
   $('#wgDel').hidden=!w;
   $('#wgStart').value=suggestStart();
   $('#wgCount').value=String(Math.max(1,layRooms().length||10));
@@ -8435,6 +8460,27 @@ function openWing(id,bldId){
   tplNote();
   $('#dlgWing').showModal();
   if(!w)$('#wgName').focus();
+}
+/* the floor picker: only when there is a choice to make. The title names the floor,
+   so "+ אגף בהמשך הקומה" visibly opens on the floor it was pressed on. */
+function fillWingFloors(){
+  const b=bldBy(EDW.building)||S.buildings[0];
+  if(!b.floors.some(f=>f.id===EDW.floor))EDW.floor=b.floors[0].id;
+  const fs=$('#wgFloor'); fs.innerHTML='';
+  for(const f of b.floors){
+    const o=document.createElement('option');
+    o.value=f.id; o.textContent=f.name;
+    fs.appendChild(o);
+  }
+  fs.value=EDW.floor;
+  fs.parentElement.style.display=isPro()&&b.floors.length>1?'':'none';
+  wingTitle();
+}
+function wingTitle(){
+  const w=EDW&&EDW.id?wingBy(EDW.id):null;
+  const b=bldBy(EDW.building);
+  const f=b&&b.floors.length>1&&isPro()?b.floors.find(x=>x.id===EDW.floor):null;
+  $('#wgTtl').textContent='🏗️ '+(w?w.name:'אגף חדש')+(f?' · '+f.name:'');
 }
 function suggestStart(){
   let max=0;
@@ -9256,7 +9302,8 @@ $('#teSave').addEventListener('click',()=>{
 const closeWing=()=>{$('#dlgWing').close();};
 $('#wgCancel').addEventListener('click',closeWing);
 $('#wgX').addEventListener('click',closeWing);
-$('#wgBld').addEventListener('change',()=>{EDW.building=$('#wgBld').value;});
+$('#wgBld').addEventListener('change',()=>{EDW.building=$('#wgBld').value;fillWingFloors();});
+$('#wgFloor').addEventListener('change',()=>{EDW.floor=$('#wgFloor').value;wingTitle();});
 $('#wgName').addEventListener('input',()=>{});
 
 $('#wgSave').addEventListener('click',()=>{
@@ -9300,23 +9347,22 @@ $('#wgSave').addEventListener('click',()=>{
   snapshot();
   const wid=EDW.id||('w'+uid());
   let w=wingBy(wid);
+  const b3=bldBy(EDW.building)||S.buildings[0];
+  const fl=b3.floors.some(f=>f.id===EDW.floor)?EDW.floor:b3.floors[0].id;
+  /* a new wing, or one moved to another floor, joins the END of that floor's row */
+  let toEnd=false,movedTo=null;
   if(!w){
-    /* born with a floor; syncLayouts will find it a free spot on the drawing */
-    const b3=bldBy(EDW.building)||S.buildings[0];
-    w={id:wid,name:nm,building:EDW.building,floor:b3.floors[0].id,plan:[]};
+    w={id:wid,name:nm,building:b3.id,floor:fl,plan:[]};
     S.wings.push(w);
+    toEnd=true;
     /* the seeded placeholder bows out once a real wing exists — same rule as the
        basic list, otherwise the floor sequence opens with an empty chip nobody made */
-    S.wings=S.wings.filter(x=>
-      x.id===wid||!(x.name==='אגף ראשי'&&!roomsOf(x.id).length&&!noteOf('wing',x.id)&&!(x.plan||[]).length));
+    S.wings=S.wings.filter(x=>x.id===wid||!isGhostWing(x));
+  }else if(w.building!==b3.id||w.floor!==fl){
+    w.building=b3.id; w.floor=fl; delete w.geom;
+    toEnd=true; movedTo=b3.floors.find(f=>f.id===fl);
   }
   w.name=nm;
-  if(w.building!==EDW.building){
-    /* moved to another building — its old floor id means nothing there */
-    w.building=EDW.building;
-    const b3=bldBy(EDW.building);
-    if(b3&&!b3.floors.some(f=>f.id===w.floor)){w.floor=b3.floors[0].id;delete w.geom;}
-  }
 
   const ren={};
   rooms.forEach(c=>{if(c.orig&&c.orig!==c.num)ren[c.orig]=c.num;});
@@ -9367,11 +9413,15 @@ $('#wgSave').addEventListener('click',()=>{
     if(r.members)return r.members.filter(b=>S.boys.includes(b)).length>=2;
     return S.boys.includes(r.a)&&S.rooms.some(x=>x.num===r.room);
   });
+  if(toEnd)appendWingToFloor(w);
   syncLayouts();
   S.activeSim=null;
   save(); closeWing(); initDynamic();
   V={level:'wing',bld:w.building,wing:w.id};
-  render(); toast('האגף נשמר ✓');
+  /* the structure page follows the wing to its floor, so it is on screen */
+  STR.bld=w.building;
+  if(EDB&&EDB.id===w.building)EDB.floor=w.floor;
+  render(); toast(movedTo?`האגף נשמר ✓ והועבר ל"${movedTo.name}"`:'האגף נשמר ✓');
 });
 $('#wgDel').addEventListener('click',()=>{
   const w=wingBy(EDW.id); if(!w)return;
@@ -11150,7 +11200,8 @@ $('#welWing').addEventListener('click',()=>{
   /* the simple mode has no template gallery — its wings are added straight on
      the structure page, so send people there with the cursor already waiting */
   if(!isPro()){setTab('struct');const n=$('#bwName');if(n){n.focus();n.scrollIntoView({block:'center'});}return;}
-  openWing(S.wings.length===1&&!S.rooms.length?S.wings[0].id:null);
+  /* always a NEW wing: opening the seeded placeholder showed a name nobody chose */
+  openWing(null);
 });
 
 /* ---------- settings panel ---------- */
