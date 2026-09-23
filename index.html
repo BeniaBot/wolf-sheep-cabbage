@@ -802,6 +802,20 @@ dialog h3{font-size:17.5px;font-weight:900;margin:0}
    two rows of room boxes along the corridor, services as marked cells between */
 #wgStrip{direction:rtl}
 .strip-row{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch;min-height:54px;padding:7px;border:1.5px dashed var(--line2);border-radius:12px}
+/* the wing's own strip must read as ONE line per side, like the sheet on the wall.
+   Wrapping made a long side look like two rows of rooms. A long wing scrolls
+   sideways instead — both sides and the corridor together, so they stay aligned. */
+#dlgWing{width:min(1040px,96vw)}
+.strip-scroll{overflow-x:auto;padding:4px 2px 8px}
+.strip-scroll .strip-row,.strip-scroll .strip-hall{width:max-content;min-width:100%;box-sizing:border-box}
+.strip-scroll .strip-row{flex-wrap:nowrap}
+.strip-scroll .sc{flex:none}
+.strip-adds{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.strip-adds .bl{font-size:12px;color:var(--muted);font-weight:800}
+.strip-ed .strip-acts{display:flex;gap:6px;flex-wrap:wrap;flex-basis:100%}
+.strip-ed{padding:10px 12px;border:1px solid var(--acc);border-radius:12px;
+  background:color-mix(in srgb,var(--acc) 6%,transparent)}
+.strip-ed .strip-ed-t{flex-basis:100%;font-size:13.5px}
 .strip-hall{margin:6px 0;padding:5px;text-align:center;border-radius:9px;
   background:repeating-linear-gradient(45deg,var(--card2),var(--card2) 9px,var(--sunk2) 9px,var(--sunk2) 18px);
   color:var(--dim);font-size:11px;font-weight:900;letter-spacing:3px}
@@ -2532,8 +2546,8 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
       <div class="ed-sec" id="wgLaySec">
         <h4>🧱 הפריסה <span class="cnt">כמו דף הקומה המודפס</span></h4>
         <div class="dlgbtns" style="margin:0 0 10px">
-          <button class="btn mini accent" id="wgModeStrip">📋 רצועה — שתי שורות לאורך המסדרון</button>
-          <button class="btn mini" id="wgModeGrid">🖌️ שרטוט חופשי — לקומה שבנויה אחרת</button>
+          <button class="btn mini accent" id="wgModeStrip">📋 כמו הדף המודפס — שתי שורות לאורך המסדרון</button>
+          <button class="btn mini" id="wgModeGrid">🖌️ ציור חופשי — לקומה שבנויה אחרת</button>
         </div>
         <div id="wgStrip" hidden></div>
         <p class="hint" id="wgGridHint">המסדרון יכול להתפתל לכל צורה — גררו אותו כמו מכחול, גם בפניות.
@@ -8677,17 +8691,73 @@ function setLayView(v,autoNote){
   $('#wgModeStrip').classList.toggle('accent',strip);
   $('#wgModeGrid').classList.toggle('accent',!strip);
   if(strip)renderStrip(); else renderLay();
-  if(autoNote)toast('הפריסה הזו חופשית מדי לרצועה — ממשיכים בשרטוט החופשי');
+  if(autoNote)toast('את הפריסה הזו אפשר לערוך רק בציור החופשי — היא לא בנויה כשתי שורות פשוטות');
 }
 function stripAfterCellsChanged(){
   if(!$('#wgStrip')||$('#wgStrip').hidden)return;
   const s=cellsToStrip(LAY.cells.map(c=>({...c})));
   if(s){setStrip(s);renderStrip();} else setLayView('grid',true);
 }
+/* Every change to a cell is a worded button next to the selected cell. Dragging
+   still works, but a man who only ever clicks a button with words on it never
+   finds a drag — so it can be a shortcut, never the only way. */
+const stripOcc=c=>c&&c.t==='room'&&c.orig?occupants(c.orig):[];
+function stripRemove(side,i){
+  const c=STRIP[side][i]; if(!c)return;
+  STRIP[side].splice(i,1); STRIP_SEL=null;
+  if(!stripSync())return;
+  const who=stripOcc(c);
+  toast((c.t==='room'?`חדר ${c.num} הוסר מהאגף`:'המשבצת הוסרה')
+    +(who.length?`.\n${cnt(who.length,'בחורים')} שישנים בו יחזרו לממתינים — רק אם תשמרו.`:''),
+    {label:'↩️ להחזיר',fn:()=>{
+      const at=Math.min(i,STRIP[side].length);
+      STRIP[side].splice(at,0,c); STRIP_SEL={side,i:at}; stripSync();
+    }});
+}
+function stripMove(side,i,dir){
+  const arr=STRIP[side],j=i+dir;
+  if(j<0||j>=arr.length)return;
+  [arr[i],arr[j]]=[arr[j],arr[i]];
+  STRIP_SEL={side,i:j}; stripSync();
+}
+function stripCross(side,i){
+  const other=side==='a'?'b':'a';
+  const c=STRIP[side].splice(i,1)[0]; if(!c)return;
+  const at=Math.min(i,STRIP[other].length);
+  STRIP[other].splice(at,0,c);
+  STRIP_SEL={side:other,i:at};
+  stripSync();                        /* a full side rolls back, with the reason */
+}
 function renderStrip(){
-  const host=$('#wgStrip'); host.innerHTML='';
+  const host=$('#wgStrip');
+  /* a long wing scrolls sideways; clicking a room far along it must not throw the
+     view back to the start on the repaint */
+  const oldSc=host.querySelector('.strip-scroll'),keepX=oldSc?oldSc.scrollLeft:0;
+  host.innerHTML='';
   host.appendChild(el('p','hint',
-    'כמו הדף שתולים על הקיר: שורה מכל צד של המסדרון. לוחצים על תא כדי לערוך אותו, גוררים כדי לסדר מחדש.'));
+    'כמו הדף שתולים על הקיר: שורה מכל צד של המסדרון, והחדר הראשון מימין. '
+    +'לוחצים על חדר — ואז אפשר לשנות אותו, להזיז אותו ימינה או שמאלה, להעביר לצד השני או להוריד.'));
+  const adds=(side,lbl)=>{
+    const add=el('div','strip-adds');
+    add.appendChild(el('span','bl',lbl));
+    const ar=el('button','btn mini','+ חדר');
+    ar.addEventListener('click',()=>{
+      STRIP[side].push({t:'room',num:stripNextNum(),beds:WLAY&&WLAY.defBeds||4,orig:null});
+      STRIP_SEL={side,i:STRIP[side].length-1};stripSync();
+      const sc=host.querySelector('.strip-scroll');
+      if(sc)sc.scrollLeft=-sc.scrollWidth;       /* RTL: the new room is at the far left */
+    });
+    const sv=document.createElement('select');
+    sv.innerHTML='<option value="">+ שירותים, מקלחות…</option>'
+      +STRIP_SVC.map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
+    sv.addEventListener('change',()=>{
+      if(!sv.value)return;
+      STRIP[side].push({t:sv.value,label:''});sv.value='';
+      STRIP_SEL={side,i:STRIP[side].length-1};stripSync();
+    });
+    add.append(ar,sv);
+    return add;
+  };
   const row=side=>{
     const r=el('div','strip-row'); r.dataset.side=side;
     STRIP[side].forEach((c,i)=>{
@@ -8700,8 +8770,8 @@ function renderStrip(){
         const lbl=(STRIP_SVC.find(x=>x[0]===c.t)||[,CELL_TYPES[c.t]?CELL_TYPES[c.t].he:c.t])[1];
         d.append(el('b',null,lbl.split(' ')[0]),el('small',null,c.label||lbl.split(' ').slice(1).join(' ')));
       }
-      const x=el('button','x','✕'); x.title='הסרה';
-      x.addEventListener('click',e=>{e.stopPropagation();STRIP[side].splice(i,1);STRIP_SEL=null;stripSync();});
+      const x=el('button','x','✕'); x.title='הורדה מהאגף';
+      x.addEventListener('click',e=>{e.stopPropagation();stripRemove(side,i);});
       d.appendChild(x);
       d.addEventListener('click',()=>{STRIP_SEL={side,i};renderStrip();});
       d.draggable=true;
@@ -8717,21 +8787,9 @@ function renderStrip(){
       });
       r.appendChild(d);
     });
-    const add=el('span','strip-add');
-    const ar=el('button','btn mini','+ חדר');
-    ar.addEventListener('click',()=>{
-      STRIP[side].push({t:'room',num:stripNextNum(),beds:WLAY&&WLAY.defBeds||4,orig:null});
-      STRIP_SEL={side,i:STRIP[side].length-1};stripSync();
-    });
-    const sv=document.createElement('select');
-    sv.innerHTML='<option value="">+ שירות…</option>'
-      +STRIP_SVC.map(([k,l])=>`<option value="${k}">${l}</option>`).join('');
-    sv.addEventListener('change',()=>{
-      if(!sv.value)return;
-      STRIP[side].push({t:sv.value,label:''});sv.value='';
-      STRIP_SEL={side,i:STRIP[side].length-1};stripSync();
-    });
-    add.append(ar,sv); r.appendChild(add);
+    if(!STRIP[side].length)r.appendChild(el('span','bl',side==='a'
+      ?'אין חדרים בצד הזה — "+ חדר" שלמעלה מוסיף'
+      :'אין חדרים בצד הזה — "+ חדר" שלמטה מוסיף'));
     r.addEventListener('dragover',e=>e.preventDefault());
     r.addEventListener('drop',e=>{
       e.preventDefault();
@@ -8741,13 +8799,21 @@ function renderStrip(){
     });
     return r;
   };
-  host.appendChild(row('a'));
-  host.appendChild(el('div','strip-hall','מ ס ד ר ו ן'));
-  host.appendChild(row('b'));
+  host.appendChild(adds('a','בשורה העליונה:'));
+  const sc=el('div','strip-scroll');
+  sc.appendChild(row('a'));
+  sc.appendChild(el('div','strip-hall','מ ס ד ר ו ן'));
+  sc.appendChild(row('b'));
+  host.appendChild(sc);
+  sc.scrollLeft=keepX;
+  host.appendChild(adds('b','בשורה התחתונה:'));
   if(STRIP_SEL){
-    const c=STRIP[STRIP_SEL.side]&&STRIP[STRIP_SEL.side][STRIP_SEL.i];
+    const side=STRIP_SEL.side,i=STRIP_SEL.i;
+    const c=STRIP[side]&&STRIP[side][i];
     if(c){
       const ed=el('div','strip-ed');
+      /* the editor sits under the strip — say which box it is talking about */
+      ed.appendChild(el('b','strip-ed-t',c.t==='room'?`✏️ חדר ${c.num} — מה לשנות בו?`:'✏️ המשבצת שבחרתם'));
       if(c.t==='room'){
         const f1=el('div','wiz-f'); f1.appendChild(el('label',null,'מספר החדר'));
         const inp=el('input'); inp.type='text'; inp.value=String(c.num); inp.style.width='90px';
@@ -8755,14 +8821,26 @@ function renderStrip(){
           const nn=inp.value.trim();
           if(!nn){inp.value=String(c.num);return;}
           const clash=[...STRIP.a,...STRIP.b].some(x=>x!==c&&x.t==='room'&&String(x.num)===nn);
-          if(clash){toast('המספר הזה כבר ברצועה');inp.value=String(c.num);return;}
+          if(clash){toast(`חדר ${nn} כבר קיים באגף הזה`);inp.value=String(c.num);return;}
+          /* said now, while he is looking at the number — not at save time */
+          const elsewhere=S.rooms.find(r=>r.num===nn&&!(EDW.id&&r.wing===EDW.id));
+          if(elsewhere){
+            toast(`חדר ${nn} כבר קיים ב"${(wingBy(elsewhere.wing)||{}).name||'אגף אחר'}"`);
+            inp.value=String(c.num);return;
+          }
           c.num=nn;stripSync();
         });
         f1.appendChild(inp);
         const f2=el('div','wiz-f'); f2.appendChild(el('label',null,'מיטות'));
         const st=el('span','stepn');
         const mi=el('button',null,'−'),vl=el('span','val',String(c.beds)),pl=el('button',null,'+');
-        mi.addEventListener('click',()=>{if(c.beds>1){c.beds--;stripSync();}});
+        mi.addEventListener('click',()=>{
+          if(c.beds<=1)return;
+          c.beds--;stripSync();
+          const occ=stripOcc(c).length;
+          if(occ>c.beds)toast(`בחדר ${c.num} ישנים ${occ} — עם ${cnt(c.beds,'מיטות')}, `
+            +`${cnt(occ-c.beds,'בחורים')} יחזרו לממתינים כשתשמרו`);
+        });
         pl.addEventListener('click',()=>{if(c.beds<12){c.beds++;stripSync();}});
         st.append(mi,vl,pl); f2.appendChild(st);
         ed.append(f1,f2);
@@ -8786,6 +8864,18 @@ function renderStrip(){
       });
       sw.append(wmi,wvl,wpl); fw.appendChild(sw);
       ed.appendChild(fw);
+      const acts=el('div','strip-acts');
+      /* right-to-left like the sheet: the start of the row is on the right */
+      if(i>0)acts.appendChild(mini('➡️ ימינה',()=>stripMove(side,i,-1)));
+      if(i<STRIP[side].length-1)acts.appendChild(mini('⬅️ שמאלה',()=>stripMove(side,i,1)));
+      acts.appendChild(mini(side==='a'?'⬇️ לצד השני של המסדרון':'⬆️ לצד השני של המסדרון',
+        ()=>stripCross(side,i)));
+      const occN=stripOcc(c).length;
+      acts.appendChild(mini(c.t==='room'
+        ? `🗑️ להוריד את חדר ${c.num}`+(occN?` (${cnt(occN,'בחורים')} יחזרו לממתינים)`:'')
+        : '🗑️ להוריד את המשבצת',
+        ()=>stripRemove(side,i),'danger-btn'));
+      ed.appendChild(acts);
       host.appendChild(ed);
     }
   }
@@ -9381,6 +9471,26 @@ $('#wgSave').addEventListener('click',()=>{
       toast(`מספר החדר ${c.num} כבר קיים באגף אחר`);return;
     }
   }
+  /* who loses a bed by this save — said BEFORE it happens, in words. It used to be
+     a plain "האגף נשמר ✓" while boys quietly went back to the waiting list. */
+  const keptOrig=new Set(rooms.map(c=>c.orig).filter(Boolean));
+  let evicted=0;
+  for(const r of (EDW.id?roomsOf(EDW.id):[])){
+    const occ=occupants(r.num).length; if(!occ)continue;
+    const c=rooms.find(x=>x.orig===r.num);
+    if(!keptOrig.has(r.num)||!c)evicted+=occ;
+    else if(occ>c.beds)evicted+=occ-c.beds;
+  }
+  const evictOk=EDW.evictOk; EDW.evictOk=false;
+  if(evicted&&!evictOk){
+    choose({title:'🛏️ יש בחורים שיישארו בלי מיטה',
+      lead:`אם תשמרו, ${cnt(evicted,'בחורים')} יחזרו לרשימת הממתינים — `
+        +'כי החדר שלהם הוסר מהאגף, או שיש בו עכשיו פחות מיטות.',
+      opts:[{ico:'💾',title:'לשמור בכל זאת',sub:'הם יחכו ברשימת הממתינים, ואחר כך משבצים אותם מחדש',
+             fn:()=>{if(!EDW)return;EDW.evictOk=true;$('#wgSave').click();}}],
+      cancel:'⬅️ לחזור לעריכת האגף'});
+    return;
+  }
   snapshot();
   const wid=EDW.id||('w'+uid());
   let w=wingBy(wid);
@@ -9458,7 +9568,10 @@ $('#wgSave').addEventListener('click',()=>{
   /* the structure page follows the wing to its floor, so it is on screen */
   STR.bld=w.building;
   if(EDB&&EDB.id===w.building)EDB.floor=w.floor;
-  render(); toast(movedTo?`האגף נשמר ✓ והועבר ל"${movedTo.name}"`:'האגף נשמר ✓');
+  render();
+  toast((movedTo?`האגף נשמר ✓ והועבר ל"${movedTo.name}"`:'האגף נשמר ✓')
+    +(evicted?` · ${cnt(evicted,'בחורים')} חזרו לממתינים`:''),
+    evicted||gone.length?{label:'↩️ לבטל את השמירה',fn:undo}:undefined);
 });
 $('#wgDel').addEventListener('click',()=>{
   const w=wingBy(EDW.id); if(!w)return;
