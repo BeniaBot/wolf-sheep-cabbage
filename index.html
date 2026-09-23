@@ -1907,10 +1907,14 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
   display:inline-flex;align-items:center;gap:6px;
   background:var(--card2);border:1px solid var(--line2);border-radius:11px;padding:4px 6px 4px 9px;
 }
+/* the room number is a box you can type in — and has to LOOK like one. Borderless,
+   it read as plain text, and a wrong number got deleted and re-added instead,
+   taking its boys and rules with it. */
 .bw-room input{
-  width:62px;background:none;border:none;color:var(--tx);font:inherit;
+  width:62px;background:var(--card);border:1px solid var(--line2);color:var(--tx);font:inherit;
   font-size:13.5px;font-weight:900;text-align:center;outline:none;border-radius:6px;padding:3px;
 }
+.bw-room input:hover{border-color:var(--hover)}
 .bw-room input:focus{background:color-mix(in srgb,var(--acc) 12%,transparent)}
 .bw-room .bl{font-size:11px;color:var(--muted);font-weight:800}
 .bw-add{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:12px}
@@ -2009,7 +2013,8 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
   <section class="panel" id="structBasic" hidden>
     <h2>🏗️ האגפים <span class="cnt" id="bwCnt"></span></h2>
     <p class="hint" style="margin-bottom:12px">כל אגף הוא רשימת חדרים. אין כאן שרטוט —
-      רק שם, מספרי חדרים וכמה מיטות בכל אחד.</p>
+      רק שם, מספרי חדרים וכמה מיטות בכל אחד.
+      לתיקון מספר חדר או שם אגף — לוחצים עליו ומקלידים.</p>
     <div id="bwList"></div>
     <div class="bw-add">
       <div class="wiz-f" style="flex:1;min-width:150px">
@@ -2018,7 +2023,7 @@ body.basic #structHint,body.basic #bldBarEd,body.basic #structBldBar{display:non
       </div>
       <div class="wiz-f"><label>כמה חדרים</label><input type="text" id="bwCount" value="10"></div>
       <div class="wiz-f"><label>מיטות בחדר</label><input type="text" id="bwBeds" value="4"></div>
-      <div class="wiz-f"><label>מהחדר</label><input type="text" id="bwStart" value="401"></div>
+      <div class="wiz-f"><label>מספר החדר הראשון</label><input type="text" id="bwStart" value="401"></div>
       <button class="btn accent" id="bwAdd">+ הוספת אגף</button>
     </div>
   </section>
@@ -3170,8 +3175,16 @@ function sidesToPlan(sides){
 const autoPlan=nums=>sidesToPlan(autoLayout(nums));
 /* the plan is a view of S.rooms, never a second source of truth: cells naming a
    room that is gone are dropped, rooms missing from it are pulled in next to a hall */
-function normPlan(plan,rooms){
+function normPlan(plan,rooms,basic){
   const want=rooms.map(r=>String(r.num));
+  if(basic===undefined)basic=typeof isPro==='function'&&!isPro();
+  /* a list-mode wing is just its rooms in order: nothing drawn, one square each.
+     It is rebuilt from the room list every time, so the board and the print-out
+     show the same order as the list — a room added after a deletion used to fill
+     the deleted room's square there, while the list put it at the end. */
+  if(basic&&want.length&&Array.isArray(plan)
+     &&plan.every(c=>c&&c.t==='room'&&(+c.w||1)===1&&(+c.h||1)===1))
+    return want.map((n,i)=>({t:'room',num:n,x:i%PW,y:Math.floor(i/PW)%PH,w:1,h:1}));
   const wantSet=new Set(want),seenNum=new Set(),seenXY=new Set();
   const cells=[];
   const take=c=>{                      /* claim every square the rectangle covers */
@@ -3209,7 +3222,7 @@ function normPlan(plan,rooms){
        corridor made the board and the printout disagree with the structure list and
        the Excel export — two outputs of the same app contradicting each other.
        Simple mode gets rooms in the order they were created, in reading order. */
-    if(typeof isPro==='function'&&!isPro())
+    if(basic)
       return want.map((n,i)=>({t:'room',num:n,x:i%PW,y:Math.floor(i/PW)%PH,w:1,h:1}));
     return autoPlan(want);
   }
@@ -3485,20 +3498,26 @@ function migrate(s){
                 return o;
               })};
     });
-  s.wings.forEach(w=>{
-    w.plan=normPlan(Array.isArray(w.plan)?w.plan:(w.layout?sidesToPlan(w.layout):null),
-                    s.rooms.filter(r=>r.wing===w.id));
-    delete w.layout;
-  });
   /* two ways to work, one data model. "basic" is a flat list of wings with rooms —
      no buildings, no floors, no drawing; "pro" is the full drafting board.
-     A project that was never told which one is judged by what it actually contains. */
+     A project that was never told which one is judged by what it actually contains.
+     Settled BEFORE the plans are normalised: normPlan lays rooms out differently in
+     each mode, and it used to read the mode of whichever project happened to be
+     open — so importing or restoring into a project of the other mode laid its
+     wings out wrong. */
   if(s.mode!=='basic'&&s.mode!=='pro'){
+    const svc=c=>c&&c.t&&c.t!=='room'&&c.t!=='hall';
     const drawn=s.buildings.length>1
       ||s.buildings.some(b=>(b.floors||[]).length>1)
-      ||s.wings.some(w=>(w.plan||[]).some(c=>c.t!=='room'&&c.t!=='hall'));
+      ||s.wings.some(w=>(Array.isArray(w.plan)?w.plan:[]).some(svc)
+        ||(w.layout&&[...(w.layout.a||[]),...(w.layout.b||[])].some(svc)));
     s.mode=drawn?'pro':'basic';
   }
+  s.wings.forEach(w=>{
+    w.plan=normPlan(Array.isArray(w.plan)?w.plan:(w.layout?sidesToPlan(w.layout):null),
+                    s.rooms.filter(r=>r.wing===w.id),s.mode==='basic');
+    delete w.layout;
+  });
 
   if(!Array.isArray(s.locks))s.locks=[];
   s.rules.forEach(r=>{
@@ -6312,15 +6331,18 @@ function dropRooms(nums,toTrash){
   S.sims.forEach(s=>{for(const b of Object.keys(s.assign))if(set.has(s.assign[b]))delete s.assign[b];});
 }
 /* beds can shrink; whoever no longer fits goes back to the waiting list */
+/* who is left over when a room has fewer beds than sleepers: a boy locked in place
+   keeps his bed — the lock is exactly the user saying "not him" */
+function overflowOf(num,beds){
+  const locked=new Set(S.locks);
+  const occ=S.boys.filter(b=>S.assign[b]===num);
+  return [...occ.filter(b=>locked.has(b)),...occ.filter(b=>!locked.has(b))].slice(beds);
+}
 function trimOverfull(){
-  for(const r of S.rooms){
-    const occ=S.boys.filter(b=>S.assign[b]===r.num);
-    occ.slice(r.beds).forEach(b=>delete S.assign[b]);
-    S.sims.forEach(s=>{
-      const o=S.boys.filter(b=>s.assign[b]===r.num);
-      o.slice(r.beds).forEach(b=>delete s.assign[b]);
-    });
-  }
+  for(const r of S.rooms)overflowOf(r.num,r.beds).forEach(b=>delete S.assign[b]);
+  /* saved versions are left exactly as saved — they were quietly edited here, so a
+     version someone kept as "the way it was" no longer was. Loading one runs the
+     same repair as any other change to the board. */
   S.locks=S.locks.filter(b=>S.assign[b]);
 }
 
@@ -6690,7 +6712,7 @@ const HELP=[
     {ul:['<b>שם האגף</b> — לוחצים על השם ומקלידים.',
          '<b>מספר חדר</b> — לוחצים על המספר ומקלידים. מי שיושב בחדר, ההערות והכללים עוברים אתו.',
          '<b>מיטות</b> — כפתורי − ו־+. הורדת מיטות מחזירה לממתינים את מי שכבר לא נכנס.',
-         '<b>+ חדר</b> מוסיף חדר בודד לאגף; ✕ מוחק חדר או אגף שלם.']},
+         '<b>+ חדר</b> מוסיף חדר בודד לאגף, עם אותו מספר מיטות. <b>🗑️</b> ליד חדר מוחק אותו, ו<b>🗑️ מחיקת האגף</b> מוחק אגף שלם — ואחרי כל מחיקה יש <b>↩️ להחזיר</b>.']},
     {tip:'מחיקה אף פעם לא סופית — כל אגף וחדר שנמחקו יושבים ב<b>🗑️ סל המיחזור</b> וניתן להחזיר אותם.'}
    ]},
   {id:'struct',pro:true,ico:'🏗️',t:'1 · מבנה: בניין, קומות ואגפים',lead:'בונים את הפנימייה כמו הדף שתלוי על הקיר.',
@@ -8027,6 +8049,7 @@ function renderStructBasic(){
     const was=w.name;
     nm.addEventListener('blur',()=>{
       const nn=(nm.value.trim()||was).slice(0,40);
+      nm.value=nn;                 /* an emptied box shows the name that was kept */
       if(nn!==was){snapshot();w.name=nn;save();renderSoon();}
     });
     nm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nm.blur();}});
@@ -8034,7 +8057,8 @@ function renderStructBasic(){
     head.appendChild(el('span','bw-sum',
       `${cnt(rooms.length,"חדרים")} · ${cnt(rooms.reduce((a,r)=>a+r.beds,0),"מיטות")}`));
     head.appendChild(noteBtn('wing',w.id,'הערה על '+w.name));
-    const del=el('button','ed-x','✕'); del.title='מחיקת האגף וכל חדריו';
+    /* a bare ✕ reads as "close this card" — and this one deleted the wing */
+    const del=el('button','btn mini danger-btn','🗑️ מחיקת האגף'); del.title='מחיקת האגף וכל חדריו';
     del.addEventListener('click',()=>{
       if(S.wings.length<2){toast('לא ניתן למחוק את האגף האחרון — לפרויקט חייב להישאר אגף אחד לפחות.\nאפשר לשנות את שמו, למחוק את חדריו, או להוסיף אגף אחר ואז למחוק את זה.');return;}
       const boys=rooms.reduce((a,r)=>a+occupants(r.num).length,0);
@@ -8061,6 +8085,7 @@ function renderStructBasic(){
         if(S.rooms.some(x=>x.num===nn)){toast(`מספר החדר ${nn} כבר קיים`);num.value=oldNum;return;}
         snapshot();
         renumberRoom(oldNum,nn);
+        sortWingRooms(r.wing);
         save();renderSoon();
       });
       num.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();num.blur();}});
@@ -8069,7 +8094,14 @@ function renderStructBasic(){
       const minus=el('button',null,'−'),val=el('span','val',String(r.beds)),plus=el('button',null,'+');
       minus.addEventListener('click',()=>{
         if(r.beds<=1)return;
+        /* one bed less in a full room puts somebody out of it — said before, by
+           name, and with the way back right in the message. It used to happen
+           without a word. */
+        const out=overflowOf(r.num,r.beds-1);
+        if(out.length&&!confirm(`בחדר ${r.num} ישנים ${occupants(r.num).length}, ואחרי השינוי יהיו בו ${cnt(r.beds-1,'מיטות')}.\n\n`
+          +`${out.join(', ')} ${out.length===1?'יחזור':'יחזרו'} לרשימת הממתינים.\n\nלהוריד מיטה?`))return;
         snapshot();r.beds--;trimOverfull();save();render();
+        if(out.length)toast(`${out.join(', ')} ${out.length===1?'חזר':'חזרו'} לממתינים`,{label:'↩️ להחזיר',fn:undo});
       });
       plus.addEventListener('click',()=>{
         if(r.beds>=12)return;
@@ -8079,11 +8111,16 @@ function renderStructBasic(){
       row.append(el('span','bl','מיטות'),st);
       const occ=occupants(r.num).length;
       if(occ)row.appendChild(el('span','bl',`${occ} בפנים`));
-      const x=el('button','ed-x','✕'); x.title='מחיקת החדר';
+      const x=el('button','ed-x','🗑️'); x.title=`מחיקת חדר ${r.num}`;
       x.addEventListener('click',()=>{
-        if(occ&&!confirm(`בחדר ${r.num} יש ${occ} בחורים — הם יחזרו לממתינים.\nלמחוק?`))return;
+        /* names, not a count — and the rules that go with the room, which used to
+           disappear without being mentioned */
+        const who=occupants(r.num),rc=S.rules.filter(q=>q.room===r.num).length;
+        if((who.length||rc)&&!confirm(`למחוק את חדר ${r.num}?\n\n`
+          +(who.length?`ישנים בו: ${who.join(', ')} — ${who.length===1?'הוא יחזור':'הם יחזרו'} לרשימת הממתינים.\n`:'')
+          +(rc?`${rc===1?'כלל אחד על החדר הזה יימחק':rc+' כללים על החדר הזה יימחקו'}.\n`:'')))return;
         snapshot();dropRooms([r.num]);save();render();
-        toast('החדר נמחק',{label:'↩️ להחזיר',fn:undo});
+        toast(`חדר ${r.num} נמחק`,{label:'↩️ להחזיר',fn:undo});
       });
       row.appendChild(x);
       rl.appendChild(row);
@@ -8092,8 +8129,15 @@ function renderStructBasic(){
     add.addEventListener('click',()=>{
       snapshot();
       const num=nextRoomNumFor(w.id);
-      S.rooms.push({num,beds:4,wing:w.id});
+      /* the wing's own bed count, not a hard-coded 4 — a wing of 2-bed rooms grew
+         4-bed rooms and the capacity came out wrong without a word */
+      const mine=roomsOf(w.id);
+      const beds=mine.length?mine[mine.length-1].beds
+        :Math.max(1,Math.min(12,parseInt($('#bwBeds').value,10)||4));
+      S.rooms.push({num,beds,wing:w.id});
+      sortWingRooms(w.id);
       save();render();
+      toast(`נוסף חדר ${num} עם ${cnt(beds,'מיטות')}`,{label:'↩️ לבטל',fn:undo});
     });
     rl.appendChild(add);
     card.appendChild(rl);
@@ -8119,6 +8163,14 @@ function nextRoomNumFor(wid){
   while(roomBy(String(n)))n++;
   return String(n);
 }
+/* a wing's rooms in number order, in their own slots of S.rooms — so a renumbered
+   or added room lands where the eye expects it, in the list and on the board */
+function sortWingRooms(wid){
+  const slots=[],mine=[];
+  S.rooms.forEach((r,i)=>{if(r.wing===wid){slots.push(i);mine.push(r);}});
+  mine.sort((p,q)=>String(p.num).localeCompare(String(q.num),'he',{numeric:true}));
+  slots.forEach((s,k)=>{S.rooms[s]=mine[k];});
+}
 /* renaming a room number has to chase it through everything that points at it */
 function renumberRoom(oldNum,nn){
   const r=roomBy(oldNum); if(!r)return;
@@ -8131,12 +8183,26 @@ function renumberRoom(oldNum,nn){
 }
 $('#bwAdd').addEventListener('click',()=>{
   const nm=$('#bwName').value.trim();
-  const count=Math.max(1,Math.min(200,parseInt($('#bwCount').value,10)||1));
-  const beds=Math.max(1,Math.min(12,parseInt($('#bwBeds').value,10)||4));
+  /* a number out of range is said, not quietly replaced: "0 מיטות" used to become 4,
+     "15" became 12, and the success message never mentioned it */
+  const num=(sel,lo,hi,def,what)=>{
+    const raw=$(sel).value.trim();
+    if(!raw)return def;
+    const v=Number(raw);
+    if(!Number.isInteger(v)||v<lo||v>hi){toast(`${what}: מספר בין ${lo} ל־${hi}`);$(sel).focus();$(sel).select();return null;}
+    return v;
+  };
   if(!nm){toast('צריך שם לאגף');$('#bwName').focus();return;}
+  const count=num('#bwCount',1,200,10,'כמה חדרים'); if(count===null)return;
+  const beds=num('#bwBeds',1,12,4,'מיטות בחדר'); if(beds===null)return;
   const nums=roomNums($('#bwStart').value,count);
   const clash=nums.filter(n=>roomBy(n));
-  if(clash.length){toast(`מספרי החדרים ${clash.slice(0,3).join(', ')} כבר קיימים — שנו את מספר ההתחלה`);return;}
+  if(clash.length){
+    const free=suggestStart();
+    toast(`החדרים ${clash.slice(0,3).join(', ')} כבר קיימים. שנו את "מספר החדר הראשון" — הפנוי הבא הוא ${free}.`,
+      {label:`להתחיל מ־${free}`,fn:()=>{$('#bwStart').value=free;$('#bwStart').focus();}});
+    return;
+  }
   snapshot();
   const b=S.buildings[0];
   const w={id:'w'+uid(),name:nm.slice(0,40),building:b.id,floor:b.floors[0].id,plan:[],geom:null};
@@ -8150,6 +8216,7 @@ $('#bwAdd').addEventListener('click',()=>{
   S.wings=S.wings.filter(x=>x.id===w.id||!isGhostWing(x));
   $('#bwName').value='';
   $('#bwStart').value=roomNums(nums[nums.length-1],2)[1];
+  syncLayouts();       /* saved WITH its rooms laid out, not only after the next render */
   save();render();
   toast(`"${w.name}" נוסף — ${cnt(count,"חדרים")}`);
 });
@@ -11577,8 +11644,13 @@ function renderWelcome(){
   document.body.classList.toggle('rail-off',railOff);
   $('#railToggle').hidden=!inProj||!S.boys.length;
   $('#stats').hidden=!inProj||empty;
-  $('#btnAuto').disabled=empty;
-  $('#btnClear').disabled=empty;
+  /* a button with nothing to act on stays off: the auto-assign lit up as the
+     brightest thing on the screen while there was not a single name to place,
+     and "הוצאת כולם מהחדרים" was live with nobody in any room */
+  $('#btnAuto').disabled=!S.boys.length||!S.rooms.length;
+  $('#btnAuto').title=$('#btnAuto').disabled
+    ?(!S.rooms.length?'קודם בונים את החדרים — שלב 1':'קודם מוסיפים את השמות — שלב 2'):'';
+  $('#btnClear').disabled=!Object.keys(S.assign).length;
   $('#btnXlsx').disabled=empty;
 }
 /* the welcome buttons: each one lands exactly where that path starts */
