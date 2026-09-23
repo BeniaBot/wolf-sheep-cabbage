@@ -10469,28 +10469,54 @@ async function readNamesFile(file){
 /* applies a full setup (boys + rooms + wings) straight into the app */
 function applySetup(setup,replace){
   snapshot();
+  /* what really happened, counted — the message used to repeat what the FILE held,
+     while rooms whose number was already taken were dropped without a word */
+  const res={boys:0,added:0,renamed:[],skipped:[]};
   if(setup.boys.length){
-    S.boys=replace?[...setup.boys]
+    const before=new Set(replace?[]:S.boys);
+    S.boys=replace?[...new Set(setup.boys)]
       :[...new Set([...S.boys,...setup.boys])];
+    res.boys=S.boys.filter(b=>!before.has(b)).length;
   }
   if(setup.rooms.length){
+    const made=new Set();
     const wingIdOf=name=>{
       const nm=(name||'').trim()||'אגף ראשי';
       let w=S.wings.find(x=>norm(x.name)===norm(nm));
-      if(!w){w={id:'w'+uid(),name:nm};S.wings.push(w);}
+      if(!w){w={id:'w'+uid(),name:nm};S.wings.push(w);made.add(w.id);}
       return w.id;
     };
-    const rooms=setup.rooms.map(r=>({num:r.num,beds:r.beds,wing:wingIdOf(r.wingName)}));
+    const rooms=setup.rooms.map(r=>({num:String(r.num),beds:r.beds,wing:wingIdOf(r.wingName)}));
     if(replace){
       S.rooms=[];S.assign={};S.locks=[];
       const keep=new Set(rooms.map(r=>r.wing));
       S.wings=S.wings.filter(w=>keep.has(w.id));
       if(!S.wings.length)S.wings=[{id:'w1',name:'אגף ראשי'}];
     }
-    for(const r of rooms) if(!roomBy(r.num)) S.rooms.push(r);
+    const taken=new Map(S.rooms.map(r=>[r.num,r.wing]));
+    for(const r of rooms){
+      let num=r.num;
+      if(taken.has(num)){
+        /* the same room in the same wing is already here — adding the file again */
+        if(taken.get(num)===r.wing){res.skipped.push(num);continue;}
+        /* a building numbered per floor has 101 in every wing. The number can only
+           name one room here, so the second one is told apart by its wing */
+        const wn=((S.wings.find(w=>w.id===r.wing)||{}).name||'').trim();
+        let nn=wn?`${wn}-${num}`:`${num}-2`,k=2;
+        while(taken.has(nn))nn=(wn?`${wn}-${num}`:num)+`-${++k}`;
+        res.renamed.push(nn); num=nn;
+      }
+      taken.set(num,r.wing);
+      S.rooms.push({num,beds:r.beds,wing:r.wing});
+      res.added++;
+    }
+    /* a wing the import created and then filled with nothing */
+    S.wings=S.wings.filter(w=>!made.has(w.id)||S.rooms.some(r=>r.wing===w.id));
+    if(!S.wings.length)S.wings=[{id:'w'+uid(),name:'אגף ראשי'}];
   }
   S=migrate(S);
   save();initDynamic();applySettings();render();
+  return res;
 }
 async function handleNamesFile(file){
   if(!file)return;
@@ -10500,20 +10526,32 @@ async function handleNamesFile(file){
     const setup=rows?parseSetupTable(rows):null;
     if(setup&&(setup.rooms.length||setup.boys.length)){
       const parts=[];
-      if(setup.boys.length)parts.push(`${setup.boys.length} בחורים`);
-      if(setup.rooms.length)parts.push(`${setup.rooms.length} חדרים`);
-      const empty=!S.boys.length&&!S.rooms.length;
-      /* "replace" clears the board and the locks too, not only the lists */
+      if(setup.boys.length)parts.push(cnt(setup.boys.length,'בחורים'));
+      if(setup.rooms.length)parts.push(cnt(setup.rooms.length,'חדרים'));
+      const go=replace=>{
+        const res=applySetup(setup,replace);
+        if($('#dlgEdit').open){$('#dlgEdit').close();ED=null;}
+        const done=[];
+        if(setup.boys.length)done.push(replace?cnt(res.boys,'בחורים'):res.boys===1?'בחור חדש אחד':res.boys+' בחורים חדשים');
+        if(setup.rooms.length)done.push(cnt(res.added,'חדרים'));
+        toast(`יובאו ${done.join(' ו־')} ✓`
+          +(res.renamed.length?'\n'+(res.renamed.length===1?'חדר אחד קיבל':res.renamed.length+' חדרים קיבלו')
+            +` את שם האגף לפני המספר, כי המספר כבר היה בשימוש — למשל ${res.renamed[0]}`:'')
+          +(res.skipped.length?'\n'+(res.skipped.length===1?'חדר אחד כבר היה ברשימה ודולג'
+            :res.skipped.length+' חדרים כבר היו ברשימה ודולגו'):''),
+          {label:'↩️ לבטל את הייבוא',fn:undo});
+      };
+      if(!S.boys.length&&!S.rooms.length){go(true);return;}
+      /* "אישור — להחליף / ביטול — להוסיף" put the wipe-everything answer behind the
+         button that means "yes" and a real action behind the one that means "never
+         mind". Named answers instead; the safe one first, and ביטול does nothing. */
       const placed=Object.keys(S.assign).length;
-      const msg=`נמצאו בקובץ: ${parts.join(' ו־')}.\n\n`
-        +(empty?'לייבא הכול?'
-          :'אישור — להחליף את הרשימות הקיימות\nביטול — להוסיף למה שכבר קיים'
-            +(placed?`\n\n⚠️ החלפה תמחק גם את השיבוץ הנוכחי (${placed} משובצים) ואת כל הנעילות.`:''));
-      const replace=empty?true:confirm(msg);
-      if(!empty&&!replace&&!confirm('להוסיף את הנתונים לרשימות הקיימות?'))return;
-      applySetup(setup,replace);
-      if($('#dlgEdit').open){$('#dlgEdit').close();ED=null;}
-      toast(`יובאו ${parts.join(' ו־')} ✓`);
+      choose({title:'📥 מה לעשות עם הקובץ?',
+        lead:`נמצאו בקובץ ${parts.join(' ו־')}. כבר יש בפרויקט ${cnt(S.boys.length,'בחורים')} ו־${cnt(S.rooms.length,'חדרים')}.`,
+        opts:[{ico:'➕',title:'להוסיף למה שכבר יש',sub:'שמות וחדרים חדשים מצטרפים; מה שכבר קיים נשאר כמו שהוא',fn:()=>go(false)},
+              {ico:'🔄',title:'להחליף את הרשימות הקיימות',
+               sub:'הרשימות הנוכחיות יוחלפו בקובץ'+(placed?` — וגם השיבוץ (${cnt(placed,'בחורים')} משובצים) והנעילות יימחקו`:''),
+               fn:()=>offerKeepCopy(()=>go(true)),danger:true}]});
       return;
     }
     // otherwise fall back to a plain list of names
