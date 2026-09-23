@@ -4882,13 +4882,10 @@ function renderWing(host,ev){
      sheet draws them as one run. Show the floor's wings in their drawn order,
      the open one highlighted, one click to walk down the corridor to the next. */
   if(isPro()){
-    const sibs=S.wings.filter(x=>x.building===w.building&&x.floor===w.floor);
+    /* the floor page's own order — sorting by x alone disagreed with it as soon as
+       the corridor turned onto a second row */
+    const sibs=floorWingsOrdered(w.building,w.floor).filter(x=>!isGhostWing(x));
     if(sibs.length>1){
-      sibs.sort((p,q)=>{
-        const px=p.geom&&p.geom.cells&&p.geom.cells.length?Math.min(...p.geom.cells.map(c=>c.x)):99;
-        const qx=q.geom&&q.geom.cells&&q.geom.cells.length?Math.min(...q.geom.cells.map(c=>c.x)):99;
-        return px-qx;
-      });
       const fb=el('div','dlgbtns wrap');
       fb.style.marginBottom='10px';
       const b2=bldBy(w.building);
@@ -7049,14 +7046,38 @@ const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'
 /* ---------- the floor sheet — the page that actually hangs on the wall ----------
    Every wing of the floor in order, each as a strip: room boxes with the occupant
    names stacked inside, services shaded between them, the corridor as a bar. */
+/* ONE order of wings for everything that lists them — the board, the print-outs and
+   Excel: building by building, floor by floor, along each floor as the sheet runs.
+   Each output used to pick its own (creation order, x only, S.rooms order) and they
+   disagreed with the floor page and with each other. */
+function wingsInOrder(){
+  const out=[],seen=new Set();
+  for(const b of S.buildings)for(const f of b.floors)
+    for(const w of floorWingsOrdered(b.id,f.id)){out.push({b,f,w});seen.add(w.id);}
+  for(const w of S.wings)if(!seen.has(w.id))
+    out.push({b:bldBy(w.building)||S.buildings[0],f:null,w});
+  return out;
+}
+/* a wing's rooms the way its drawing reads, then anything the drawing lacks */
+function roomsInOrder(w){
+  const order=planRoomNums(w.plan),seen=new Set(order);
+  return [...order.map(n=>roomBy(n)).filter(r=>r&&r.wing===w.id),
+          ...roomsOf(w.id).filter(r=>!seen.has(r.num))];
+}
+/* "אגף 200 · קומה ב׳" — the floor is named only where there is more than one */
+const wingLabel=(w,b,f)=>w.name+(isPro()&&f&&b&&b.floors.length>1?' · '+f.name:'');
 function printFloorSheet(bid,fid){
   const b=bldBy(bid),fl=b&&b.floors.find(f=>f.id===fid);
   const ws=floorWingsOrdered(bid,fid).filter(w=>roomsOf(w.id).length);
   if(!ws.length){toast('אין עדיין חדרים בקומה הזו — אין מה להדפיס');return;}
+  /* both sides of the corridor on ONE scale — each row used to stretch on its own,
+     so a side of nine boxes and a side of ten never lined up across the corridor */
+  let U=1;
+  const cw=c=>'flex:0 0 calc(100% * '+stripW(c)+' / '+U+')';
   const roomBox=c=>{
     const r=roomBy(c.num); if(!r)return '';
     const occ=occupants(r.num);
-    return '<div class="fs-c fs-room" style="flex:'+stripW(c)+'">'
+    return '<div class="fs-c fs-room" style="'+cw(c)+'">'
       +'<div class="fs-num">'+esc(r.num)+'</div>'
       +(occ.length?occ.map(n=>'<div class="fs-nm">'+esc(n)+'</div>').join('')
                   :'<div class="fs-nm fs-dim">— ריק —</div>')
@@ -7064,17 +7085,19 @@ function printFloorSheet(bid,fid){
   };
   const svcBox=c=>{
     const T=CELL_TYPES[c.t]||{he:c.t};
-    return '<div class="fs-c fs-svc" style="flex:'+stripW(c)+'">'+esc(c.label||T.he)+'</div>';
+    return '<div class="fs-c fs-svc" style="'+cw(c)+'">'+esc(c.label||T.he)+'</div>';
   };
   let h='<style>'
     +'.fs-strip{margin:6px 0 18px}'
     +'.fs-row{display:flex;direction:rtl;gap:0;align-items:stretch}'
-    +'.fs-c{border:1.5px solid #333;padding:4px 6px;min-width:52px;text-align:center;margin-inline-end:-1.5px}'
+    +'@page{size:landscape}'
+    +'.fs-c{border:1.5px solid #333;padding:4px 6px;min-width:0;box-sizing:border-box;text-align:center;overflow-wrap:anywhere}'
+    +'.fs-row .fs-c+.fs-c{border-inline-start:0}'
     +'.fs-num{font-weight:800;font-size:13px;border-bottom:1px solid #999;margin-bottom:3px}'
     +'.fs-nm{font-size:11px;line-height:1.55}'
     +'.fs-dim{color:#999}'
     +'.fs-svc{background:#eee;display:flex;align-items:center;justify-content:center;font-size:11px;color:#444}'
-    +'.fs-hall{border:1.5px solid #333;border-block:none;background:repeating-linear-gradient(45deg,#fff,#fff 7px,#f0f0f0 7px,#f0f0f0 14px);'
+    +'.fs-hall{box-sizing:border-box;border:1.5px solid #333;border-block:none;background:repeating-linear-gradient(45deg,#fff,#fff 7px,#f0f0f0 7px,#f0f0f0 14px);'
     +'text-align:center;font-size:10px;letter-spacing:6px;color:#666;padding:3px}'
     +'</style>'
     +'<h1>'+esc(fl?fl.name:'קומה')+(S.buildings.length>1&&b?' · '+esc(b.name):'')+'</h1>'
@@ -7083,9 +7106,11 @@ function printFloorSheet(bid,fid){
     h+='<h2>'+esc(w.name)+'</h2>';
     const s=cellsToStrip((w.plan||[]).map(c=>({...c})));
     if(s&&(s.a.length||s.b.length)){
+      U=Math.max(1,sideLen(s.a),sideLen(s.b));
+      const hall=(w.plan||[]).some(c=>c.t==='hall');
       const row=arr=>'<div class="fs-row">'+arr.map(c=>c.t==='room'?roomBox(c):svcBox(c)).join('')+'</div>';
       h+='<div class="fs-strip">'+(s.a.length?row(s.a):'')
-        +'<div class="fs-hall">מ ס ד ר ו ן</div>'
+        +(hall?'<div class="fs-hall">מ ס ד ר ו ן</div>':'')
         +(s.b.length?row(s.b):'')+'</div>';
     }else{
       /* a free-drawn wing falls back to its table — better honest than mangled */
@@ -7132,17 +7157,14 @@ function printAssignment(){
        +'<p class="sub">'+esc(S.desc||'')+(S.desc?' · ':'')
        +placed+' משובצים מתוך '+S.boys.length+' · '+S.rooms.length+' חדרים'
        +' · הופק '+new Date().toLocaleDateString('he-IL')+'</p>';
-  for(const b of S.buildings){
-    const ws=wingsOf(b.id).filter(w=>roomsOf(w.id).length);
-    if(!ws.length)continue;
-    if(S.buildings.length>1)h+='<h2>'+esc((b.icon||'')+' '+b.name)+'</h2>';
-    for(const w of ws){
-      h+='<h2>'+esc(w.name)+'</h2><table><tr><th style="width:70px">חדר</th><th>הבחורים</th><th style="width:60px">תפוסה</th></tr>';
-      const order=planRoomNums(w.plan);
-      const seen=new Set(order);
-      const list=[...order.map(n=>roomBy(n)).filter(Boolean),
-                  ...roomsOf(w.id).filter(r=>!seen.has(r.num))];
-      for(const r of list){
+  let lastB=null;
+  for(const {b,f,w} of wingsInOrder()){
+    if(!roomsOf(w.id).length)continue;
+    if(S.buildings.length>1&&b!==lastB)h+='<h2>'+esc((b.icon||'')+' '+b.name)+'</h2>';
+    lastB=b;
+    {
+      h+='<h2>'+esc(wingLabel(w,b,f))+'</h2><table><tr><th style="width:70px">חדר</th><th>הבחורים</th><th style="width:60px">תפוסה</th></tr>';
+      for(const r of roomsInOrder(w)){
         const occ=occupants(r.num);
         const note=noteOf('room',r.num);
         h+='<tr><td><b>'+esc(r.num)+'</b>'+(note?'<br><span style="font-size:10px;color:#666">📝 '+esc(note)+'</span>':'')+'</td>'
@@ -10083,12 +10105,14 @@ function xlsxSheet(){
 
   // ---- one block per wing ----
   let ci=0;
-  for(const w of S.wings){
-    const wr=S.rooms.filter(r=>r.wing===w.id);
+  /* the same order as the board and the print-out, floors named */
+  for(const {b:wb,f:wf,w} of wingsInOrder()){
+    const wr=roomsInOrder(w);
     if(!wr.length)continue;
     const wBeds=wr.reduce((a,r)=>a+r.beds,0);
     const wOcc=wr.reduce((a,r)=>a+occupants(r.num).length,0);
-    push([{c:0,v:`${w.name}  —  ${wr.length} חדרים, ${wOcc}/${wBeds} מיטות תפוסות`,s:2}],24); mergeRow();
+    const bName=S.buildings.length>1?wb.name+' · ':'';
+    push([{c:0,v:`${bName}${wingLabel(w,wb,wf)}  —  ${wr.length} חדרים, ${wOcc}/${wBeds} מיטות תפוסות`,s:2}],24); mergeRow();
     const head=[{c:0,v:'חדר',s:3}];
     for(let b=0;b<maxBeds;b++)head.push({c:1+b,v:`מיטה ${b+1}`,s:3});
     head.push({c:occCol,v:'תפוסה',s:3});
