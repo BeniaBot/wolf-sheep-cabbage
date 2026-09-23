@@ -3351,6 +3351,17 @@ function clearSearches(){
     const i=$(inp); if(i)i.value='';
     const c=$(clr); if(c)c.hidden=true;
   }
+  /* the help box is emptied above; its filter has to go with it */
+  if(typeof HP!=='undefined')HP.q='';
+}
+/* everything that belongs to the SCREEN rather than the data. When the whole
+   project is swapped — a restored backup, a reset — none of it may survive: ticked
+   names came back ticked with the bulk bar armed, and the rule form stayed in
+   edit mode on a rule that no longer existed. */
+function afterStateReplaced(){
+  clearSel();formMembers.clear();editingRule=null;paintRuleForm();
+  clearSearches();resetSessionState();
+  STR={bld:null,canvas:false};EDB=null;EDW=null;ED=null;
 }
 /* typing must not pay for a full repaint per character — the redraw trails the
    keystrokes by a beat, while clearing the box is immediate */
@@ -3801,7 +3812,7 @@ function bootProjects(){
    as a machine talking, so counts go through here: 1 → "אגף אחד", otherwise "N אגפים". */
 const HE_ONE={'אגפים':'אגף אחד','חדרים':'חדר אחד','בחורים':'בחור אחד','מיטות':'מיטה אחת',
               'כללים':'כלל אחד','קבוצות':'קבוצה אחת','גרסאות':'גרסה אחת','משובצים':'אחד משובץ',
-              'הפרות':'הפרה אחת','פריטים':'פריט אחד','בניינים':'בניין אחד'};
+              'הפרות':'הפרה אחת','פריטים':'פריט אחד','בניינים':'בניין אחד','גרסאות שמורות':'גרסה שמורה אחת'};
 const cnt=(n,word)=>n===1&&HE_ONE[word]?HE_ONE[word]:`${n} ${word}`;
 const occupants=num=>S.boys.filter(b=>S.assign[b]===num);
 const roomBy=num=>S.rooms.find(r=>r.num===num);
@@ -6074,25 +6085,33 @@ $('#fileImport').addEventListener('change',e=>{
          choose-or-add, and PID still points at whatever was open behind the card
          grid. Restoring there used to silently overwrite THAT project — it vanished
          from the list and came back wearing the backup's name. */
-      if(!PID||V.level==='projects'){
+      /* the file is checked above BEFORE anything is created: a restore into a new
+         project has nothing to overwrite, so it asks nothing. It used to create the
+         project first and then warn about overwriting its placeholder "1 אגפים" —
+         and ביטול left an empty stray project in the list. */
+      const fresh=!PID||V.level==='projects';
+      if(!fresh){
+        /* this replaces everything — and "everything" is not only the boys */
+        const cur=[S.boys.length&&cnt(S.boys.length,'בחורים'),
+                   S.rooms.length&&cnt(S.wings.length,'אגפים'),
+                   S.rooms.length&&cnt(S.rooms.length,'חדרים'),
+                   S.rules.length&&cnt(S.rules.length,'כללים'),
+                   S.sims.length&&cnt(S.sims.length,'גרסאות שמורות')].filter(Boolean);
+        if(cur.length&&!confirm(
+          `שחזור גיבוי ידרוס את כל מה שבפרויקט עכשיו:\n${cur.join(' · ')}.\n\n`
+          +`הקובץ שנבחר מכיל ${cnt(s.boys.length,'בחורים')} ו־${cnt(s.rooms.length,'חדרים')}.\n\nלהמשיך?`))
+          {toast('השחזור בוטל — לא השתנה כלום');return;}
+      }else{
         createProject(String(s.zman||'שוחזר מגיבוי').slice(0,80),String(s.desc||'').slice(0,240));
         if(!PID){toast('לא הצלחתי ליצור פרויקט לשחזור');return;}
       }
-      /* this replaces everything — and "everything" is not only the boys */
-      const cur=[S.boys.length&&cnt(S.boys.length,'בחורים'),
-                 S.wings.length&&S.wings.length+' אגפים',
-                 S.rooms.length&&S.rooms.length+' חדרים',
-                 S.rules.length&&S.rules.length+' כללים',
-                 S.sims.length&&S.sims.length+' סימולציות'].filter(Boolean);
-      if(cur.length&&!confirm(
-        `שחזור גיבוי ידרוס את כל מה שבפרויקט עכשיו:\n${cur.join(' · ')}.\n\n`
-        +`הקובץ שנבחר מכיל ${s.boys.length} בחורים ו־${s.rooms.length} חדרים.\n\nלהמשיך?`))
-        {toast('השחזור בוטל');return;}
       snapshot();
-      S=migrate(s);save();initDynamic();
+      S=migrate(s);afterStateReplaced();save();initDynamic();
       applySettings();applyAiIdentity();paintDisplayUI();
       V={level:'home',bld:null,wing:null};
-      render();toast('הגיבוי שוחזר ✓ — ↩️ ביטול מחזיר');
+      render();
+      if(fresh)toast(`הגיבוי שוחזר לפרויקט חדש: "${S.zman||'שוחזר מגיבוי'}" ✓`);
+      else toast('הגיבוי שוחזר ✓',{label:'↩️ להחזיר את מה שהיה',fn:undo});
     }catch(err){toast('הקובץ לא תקין');}
   };
   rd.readAsText(f);
@@ -10960,10 +10979,9 @@ function runActions(acts){
         /* scoped to the open project — the advisor must never be able to wipe the others */
         const keepName=S.zman,keepDesc=S.desc;
         S=blankProject(); S.zman=keepName; S.desc=keepDesc;
-        clearSel();formMembers.clear();UNDO.length=0;ED=null;EDW=null;
-        editingRule=null;paintRuleForm();
+        UNDO.length=0;afterStateReplaced();
         V={level:'home',bld:null,wing:null};
-        clearSearches();save();initDynamic();applySettings();render();
+        save();initDynamic();applySettings();render();
         done.push('הפרויקט אופס למצב התחלתי');
       }
       /* ---------- rules ---------- */
@@ -11940,11 +11958,9 @@ $('#rstAll').addEventListener('click',()=>{
   localStorage.removeItem(GLIST);
   const keepName=S.zman,keepDesc=S.desc;
   S=blankProject(); S.zman=keepName; S.desc=keepDesc;
-  clearSel();formMembers.clear();UNDO.length=0;ED=null;EDW=null;EDB=null;
-  editingRule=null;paintRuleForm();
+  UNDO.length=0;afterStateReplaced();
   V={level:'home',bld:null,wing:null};
   setTab('board');
-  clearSearches();
   AIH.length=0;$('#aiMsgs').innerHTML='';$('#aiPanel').hidden=true;
   save();initDynamic();applySettings();render();renderSetStats();
   $('#dlgSettings').close();
