@@ -8429,7 +8429,7 @@ function openWing(id,bldId){
   if(pro){
     /* the strip is the default — it is what the yeshiva's own sheets look like.
        A wing painted too freely for it opens in the grid, no questions asked. */
-    STRIP=cellsToStrip(cells.map(c=>({...c}))); STRIP_SEL=null;
+    setStrip(cellsToStrip(cells.map(c=>({...c}))));
     setLayView(STRIP?'strip':'grid');
   }else renderLay();
   tplNote();
@@ -8523,33 +8523,51 @@ function cellsToStrip(cells){
      the sheet regardless of how many beds it holds */
   const mk=c=>c.t==='room'?{t:'room',num:c.num,beds:c.beds,orig:c.orig||null,w:cellW(c)}
                           :{t:c.t,label:c.label||'',w:cellW(c)};
+  /* anything the strip cannot show EXACTLY opens in the free drawing instead:
+     a room wider than the strip allows, or a side too long for the page, would be
+     shrunk or cut on the first edit — and whatever is cut is deleted on save */
+  if(cells.some(c=>c.t!=='hall'&&(cellH(c)!==1||cellW(c)>STRIP_MAXW)))return null;
   if(!halls.length){
     /* a basic-mode wing has rooms and no corridor at all — reading order onto one
-       side is an honest starting point, and dragging splits them across the hall */
-    if(cells.some(c=>cellH(c)!==1))return null;
-    const flat=[...cells].sort((p,q)=>p.y-q.y||p.x-q.x);
-    return {a:flat.map(mk),b:[]};
+       side is an honest starting point; a long one is split across the corridor */
+    const flat=[...cells].sort((p,q)=>p.y-q.y||p.x-q.x).map(mk);
+    if(sideLen(flat)<=STRIP_MAX)return {a:flat,b:[]};
+    const half=Math.ceil(flat.length/2);
+    const s={a:flat.slice(0,half),b:flat.slice(half)};
+    return stripFits(s)?s:null;
   }
   const hy=halls[0].y;
   if(halls.some(h=>h.y!==hy))return null;
   const a=[],b=[];
   for(const c of cells){
     if(c.t==='hall')continue;
-    if(cellH(c)!==1)return null;
     if(c.y===hy-1)a.push(c); else if(c.y===hy+1)b.push(c); else return null;
   }
   a.sort((p,q)=>p.x-q.x); b.sort((p,q)=>p.x-q.x);
-  return {a:a.map(mk),b:b.map(mk)};
+  /* a gap drawn along the corridor is real (a wall, a stairwell nobody marked) —
+     the strip would silently close it up, so such a wing stays in the drawing */
+  const packed=arr=>{let x=1;for(const c of arr){if(c.x!==x)return false;x+=cellW(c);}return true;};
+  if(!packed(a)||!packed(b))return null;
+  const s={a:a.map(mk),b:b.map(mk)};
+  return stripFits(s)?s:null;
 }
-const stripW=c=>Math.max(1,Math.min(6,Math.round(+c.w||1)));
+/* one side of the corridor holds PW-2 squares — the width of the plan grid that
+   the board, the print-out and the floor sheet all draw from */
+const STRIP_MAX=PW-2,STRIP_MAXW=6;
+const stripW=c=>Math.max(1,Math.min(STRIP_MAXW,Math.round(+c.w||1)));
+const sideLen=arr=>arr.reduce((a,c)=>a+stripW(c),0);
+const stripFits=s=>!!s&&sideLen(s.a)<=STRIP_MAX&&sideLen(s.b)<=STRIP_MAX;
+/* the last strip that fitted — an edit that overflows is rolled back to it */
+let STRIP_OK=null;
+function setStrip(s){STRIP=s;STRIP_SEL=null;STRIP_OK=s?JSON.stringify(s):null;}
 function stripToCells(s){
-  /* cells are laid end to end; a wide room simply occupies more of the corridor */
+  /* cells are laid end to end; a wide room simply occupies more of the corridor.
+     Nothing is ever dropped here: stripSync refuses any edit that would not fit. */
   const out=[];
   const place=(arr,y)=>{
     let x=1;
     for(const c of arr){
       const w=stripW(c);
-      if(x+w>PW-1)break;
       out.push({...c,x,y,w,h:1});
       x+=w;
     }
@@ -8570,7 +8588,21 @@ function stripNextNum(){
     n=roomNums(n,2)[1]||String((+n||100)+1);
   return n;
 }
-function stripSync(){LAY.cells=stripToCells(STRIP);LAY.sel=null;tplNote();renderStrip();}
+function stripSync(){
+  /* an edit that makes a side longer than the page is undone on the spot, with the
+     reason — the old code cut the overflow out of the saved plan while the screen
+     kept showing it, and saving then deleted those rooms and emptied their beds */
+  if(!stripFits(STRIP)){
+    STRIP=STRIP_OK?JSON.parse(STRIP_OK):{a:[],b:[]};STRIP_SEL=null;
+    toast(`הצד הזה של המסדרון מלא — נכנסות בו עד ${STRIP_MAX} משבצות.\n`
+      +'אפשר להעביר חדר לצד השני, להקטין חדר, או לחלק לשני אגפים שממשיכים זה את זה.');
+    renderStrip();
+    return false;
+  }
+  STRIP_OK=JSON.stringify(STRIP);
+  LAY.cells=stripToCells(STRIP);LAY.sel=null;tplNote();renderStrip();
+  return true;
+}
 function setLayView(v,autoNote){
   const strip=v==='strip';
   $('#wgStrip').hidden=!strip;
@@ -8584,7 +8616,7 @@ function setLayView(v,autoNote){
 function stripAfterCellsChanged(){
   if(!$('#wgStrip')||$('#wgStrip').hidden)return;
   const s=cellsToStrip(LAY.cells.map(c=>({...c})));
-  if(s){STRIP=s;STRIP_SEL=null;renderStrip();} else setLayView('grid',true);
+  if(s){setStrip(s);renderStrip();} else setLayView('grid',true);
 }
 function renderStrip(){
   const host=$('#wgStrip'); host.innerHTML='';
@@ -8694,8 +8726,8 @@ function renderStrip(){
 }
 $('#wgModeStrip').addEventListener('click',()=>{
   const s=cellsToStrip(LAY.cells.map(c=>({...c})));
-  if(!s){toast('הפריסה הזו חופשית מדי לרצועה — יש בה מסדרון מפותל או חדרים גדולים');return;}
-  STRIP=s;STRIP_SEL=null;setLayView('strip');
+  if(!s){toast('את הפריסה הזו אי אפשר להציג כמו הדף המודפס בלי לשנות אותה —\nיש בה מסדרון מפותל, רווח, חדר גבוה או צד ארוך מדי. היא נשארת בציור החופשי.');return;}
+  setStrip(s);setLayView('strip');
 });
 $('#wgModeGrid').addEventListener('click',()=>setLayView('grid'));
 
@@ -9240,6 +9272,14 @@ $('#wgSave').addEventListener('click',()=>{
       $('#wgApplyTpl').click();
       if(!layRooms().length)return;      /* the build reported its own reason */
     }
+  }
+  /* the backstop: what is saved must be exactly what the strip shows. If the two
+     ever disagree, refusing is the only safe answer — saving would delete rooms
+     that are still on the screen and send their occupants back to waiting. */
+  if(isPro()&&!$('#wgStrip').hidden&&STRIP){
+    const shown=[...STRIP.a,...STRIP.b].filter(c=>c.t==='room').map(c=>String(c.num)).sort().join('|');
+    const kept=layRooms().map(c=>String(c.num)).sort().join('|');
+    if(shown!==kept){toast('משהו בפריסה לא יישמר כמו שהוא מוצג, ולכן לא שמרתי.\nנסו ללחוץ שוב על "📋 כמו הדף המודפס" ולשמור.');return;}
   }
   /* reading order on the grid becomes the room order everywhere else */
   const rooms=layRooms().slice().sort((p,q)=>p.y-q.y||p.x-q.x);
